@@ -444,7 +444,10 @@ export default function App() {
   const [outputName, setOutputName] = useState('')
   const [dirty, setDirty] = useState(false)
   const [layer, setLayer] = useState(0)
-  const [showAll, setShowAll] = useState(false)
+  // Die Schichtvorschau zeigt ab dem ersten Slicen das ganze Teil bis zur
+  // gewählten Schicht. Mit „nur aktuelle Schicht“ war die 3D-Ansicht direkt
+  // nach dem Slicen fast leer und der Schieberegler schien nichts zu tun.
+  const [showAll, setShowAll] = useState(true)
   const [previewColorMode, setPreviewColorMode] = useState<PreviewColorMode>('kind')
   const [hiddenPreviewFeatures, setHiddenPreviewFeatures] = useState<PreviewFeatureKind[]>([])
   /** Vergleichsstand und Werkzeuge der erweiterten Vorschau (A-82). */
@@ -1209,7 +1212,7 @@ export default function App() {
         setPlateCount(targetSession?.plateCount ?? 1)
         setOutputName(targetSession?.outputName ?? '')
         setLayer(targetSession?.layer ?? 0)
-        setShowAll(targetSession?.showAll ?? false)
+        setShowAll(targetSession?.showAll ?? true)
         setPreviewColorMode(targetSession?.previewColorMode ?? 'kind')
         setCalibration(null)
         setTool(null)
