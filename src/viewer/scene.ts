@@ -21,6 +21,48 @@ import {
 import { segmentInsideFilter, type PreviewFilterBounds } from './previewFilters.ts'
 import { surfaceTextureSwatch, type SurfaceTexturePattern } from '../../shared/surfaceTexture.ts'
 
+/** Kantenlänge einer Texturkachel in Millimetern — derselbe Ausschnitt, den
+ *  surfaceTextureSwatch abtastet. */
+const TEXTURE_TILE_MM = 12
+
+/**
+ * STL und die meisten Importformate bringen keine UV-Koordinaten mit. Ohne
+ * sie liest der Shader für jeden Eckpunkt denselben Texel (0,0), das Modell
+ * bleibt einfarbig. Die Projektion wählt je Dreieck die dominante Normale und
+ * legt die beiden anderen Achsen in Millimetern auf die Kachel — damit misst
+ * ein Muster auf dem Modell so viel wie im G-code.
+ */
+function addProjectedUv(geometry: THREE.BufferGeometry) {
+  if (geometry.attributes.uv) return
+  const pos = geometry.attributes.position
+  const index = geometry.index
+  const uv = new Float32Array(pos.count * 2)
+  const corners = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()]
+  const ab = new THREE.Vector3()
+  const ac = new THREE.Vector3()
+  const n = new THREE.Vector3()
+  const total = index ? index.count : pos.count
+  for (let i = 0; i + 2 < total; i += 3) {
+    const ids = index ? [index.getX(i), index.getX(i + 1), index.getX(i + 2)] : [i, i + 1, i + 2]
+    for (let k = 0; k < 3; k++) corners[k].fromBufferAttribute(pos, ids[k])
+    const [a, b, c] = corners
+    ab.subVectors(b, a)
+    ac.subVectors(c, a)
+    n.crossVectors(ab, ac)
+    const ax = Math.abs(n.x)
+    const ay = Math.abs(n.y)
+    const az = Math.abs(n.z)
+    const axis = ax >= ay && ax >= az ? 0 : ay >= az ? 1 : 2
+    for (let k = 0; k < 3; k++) {
+      const p = corners[k]
+      uv[ids[k] * 2] = (axis === 0 ? p.y : p.x) / TEXTURE_TILE_MM
+      uv[ids[k] * 2 + 1] = (axis === 1 ? p.z : axis === 2 ? p.y : p.z) / TEXTURE_TILE_MM
+    }
+  }
+  geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2))
+}
+
+
 export type MeasureInfo = { distance: number; a: Vec3; b: Vec3 | null; points: number }
 
 export type PreviewSection = { axis: 'x' | 'y' | 'z'; position: number }
@@ -829,7 +871,8 @@ export class Scene3D {
     const texture = new THREE.CanvasTexture(canvas)
     texture.wrapS = THREE.RepeatWrapping
     texture.wrapT = THREE.RepeatWrapping
-    texture.repeat.set(5, 5)
+    addProjectedUv(this.modelMesh.geometry)
+    texture.repeat.set(1, 1)
     texture.needsUpdate = true
     this.texturePreview = texture
     mat.map = texture
@@ -1527,28 +1570,40 @@ export class Scene3D {
 
 /** Beschriftung im 3D-Raum — als Sprite immer zur Kamera ausgerichtet. */
 function textLabel(text: string, color: string, scale: number): THREE.Sprite {
+  const font = '700 68px Inter, Segoe UI, sans-serif'
+  // Breite an den Text anpassen: Ein fester 512-px-Canvas schnitt lange
+  // Objektnamen links und rechts ab („hyperion-skiff-x3.stl“ → „perion…“).
   const canvas = document.createElement('canvas')
-  canvas.width = 512
+  const probe = canvas.getContext('2d')
+  let label = text
+  if (probe) {
+    probe.font = font
+    const fit = (value: string) => Math.ceil(probe.measureText(value).width) + 48
+    while (label.length > 1 && fit(label) > 1024) label = `${label.slice(0, -2)}…`
+    canvas.width = Math.min(1024, Math.max(128, fit(label)))
+  } else {
+    canvas.width = 512
+  }
   canvas.height = 128
   const ctx = canvas.getContext('2d')
   if (ctx) {
     ctx.clearRect(0, 0, canvas.width, canvas.height)
-    ctx.font = '700 68px Inter, Segoe UI, sans-serif'
+    ctx.font = font
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
     ctx.lineJoin = 'round'
     ctx.lineWidth = 12
     ctx.strokeStyle = 'rgba(5,8,12,0.92)'
-    ctx.strokeText(text, 256, 66)
+    ctx.strokeText(label, canvas.width / 2, 66)
     ctx.fillStyle = color
-    ctx.fillText(text, 256, 66)
+    ctx.fillText(label, canvas.width / 2, 66)
   }
   const texture = new THREE.CanvasTexture(canvas)
   texture.colorSpace = THREE.SRGBColorSpace
   const sprite = new THREE.Sprite(
     new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false, depthTest: false }),
   )
-  sprite.scale.set(4 * scale, scale, 1)
+  sprite.scale.set((scale * canvas.width) / 128, scale, 1)
   sprite.renderOrder = 40
   return sprite
 }
