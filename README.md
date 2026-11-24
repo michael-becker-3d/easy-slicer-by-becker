@@ -17,6 +17,12 @@ dem eigenen Rechner.
 Windows. This is a public test build. Feedback is very welcome — especially from
 testers with multi-material / color-change systems (AMS, ACE, CFS, IFS, MMU).*
 
+![Studio-Ansicht des Easy-Slicer mit geladenem Modell](medien/01-studio-klassisch.png)
+
+*Studio mit geladenem Modell: links Maße, Volumen und Überhang, in der Mitte
+Werkzeugleiste und Druckbett, rechts Ergebnis und Verbesserungsvorschläge.
+Weitere Aufnahmen der Oberfläche stehen in [`medien/`](medien/README.md).*
+
 ---
 
 ## Inhalt
