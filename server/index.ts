@@ -2309,13 +2309,19 @@ app.post('/api/slice', async (req, res) => {
   }
   const labelPart = (gcode: string, name: string, index = 0, count = 1) => {
     const output = merged.output
-    if (!output?.objectLabels && !output?.excludeObjects) return gcode
+    // ZMOD-Drucker (z. B. AD5X) lesen im Startmakro die Objektliste: Ohne
+    // EXCLUDE_OBJECT_DEFINE fällt die Düsen-Reinigungslinie auf _CLEAR2
+    // zurück — eine Bahn quer über die vordere Bettkante bei 0,2 mm, die bei
+    // knappem Bett-Mesh die Düse ins Bett drückt (Kollisionsschutz → Shutdown).
+    // Deshalb dort unabhängig vom Schalter schreiben.
+    const exclude = output?.excludeObjects === true || machine.zmodMesh === true
+    if (!output?.objectLabels && !exclude) return gcode
     const label = safeLabel(name)
     const objectName = safeObject(name)
     const lines: string[] = []
     let excludeDefined = false
-    if (output.objectLabels) lines.push(`; OBJECT_START: ${label}`)
-    if (output.excludeObjects) {
+    if (output?.objectLabels) lines.push(`; OBJECT_START: ${label}`)
+    if (exclude) {
       if (isKlipperFlavor(machine.flavor)) {
         const polygon = klipperObjectPolygon(gcode)
         if (polygon) {
@@ -2335,7 +2341,7 @@ app.post('/api/slice', async (req, res) => {
     if (excludeDefined) {
       lines.push(isKlipperFlavor(machine.flavor) ? `EXCLUDE_OBJECT_END NAME=${objectName}` : 'M486 S-1')
     }
-    if (output.objectLabels) lines.push(`; OBJECT_END: ${label}`)
+    if (output?.objectLabels) lines.push(`; OBJECT_END: ${label}`)
     return `${lines.join('\n')}\n`
   }
   const finalize = async (result: SliceResult): Promise<SliceResult> => {

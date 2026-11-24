@@ -2912,7 +2912,7 @@ export function SettingsSidebar({
               label="Objekte ausschließen"
               value={settings.output.excludeObjects}
               path={['output', 'excludeObjects']}
-              hint="Schreibt Firmware-Marker: Klipper EXCLUDE_OBJECT_*, andere Flavor M486. Der Objektausschluss in der Liste bleibt die eigentliche Auswahl."
+              hint="Schreibt Firmware-Marker: Klipper EXCLUDE_OBJECT_*, andere Flavor M486. Bei ZMOD-Druckern (z. B. AD5X) stehen die Marker immer im G-Code, weil deren Startmakro die Objektliste für Purge-Linie und Parkposition liest — ohne sie fällt es auf eine Bahn an der vorderen Bettkante zurück."
               {...common}
             />
             <Fold

@@ -349,7 +349,7 @@ export const SETTING_INFO: Record<string, string> = {
   'Liniennummern hinzufügen':
     'Setzt N-Nummern vor die G-Code-Befehle — nur für alte Firmware oder Prüfwerkzeuge nötig. Moderne Firmware ignoriert sie, die Datei wird etwas größer.',
   'Objekte ausschließen':
-    'Schreibt Firmware-Marker, mit denen sich einzelne Objekte am Drucker noch abwählen lassen (Klipper EXCLUDE_OBJECT_*, Marlin M486). Die eigentliche Auswahl bleibt weiterhin die Objektliste',
+    'Schreibt Firmware-Marker, mit denen sich einzelne Objekte am Drucker noch abwählen lassen (Klipper EXCLUDE_OBJECT_*, Marlin M486). Die eigentliche Auswahl bleibt weiterhin die Objektliste. Bei ZMOD-Druckern (z. B. AD5X) sind die Marker immer aktiv, weil START_PRINT daraus Purge-Linie und Parkposition bestimmt; ohne sie reinigt der Drucker an der vorderen Bettkante und kann dort die Düse ins Bett drücken.',
   Musteratlas:
     'Zeigt die Muster, für die es noch kein Preset gibt — derzeit Gehämmert, Wellen, Leder und Bruchstein. Ein Klick übernimmt nur das Muster in die Wandtextur; Tiefe, Merkmalsgröße, Richtung und Punktabstand bleiben stehen. Ob mit Struktur geslict wird, entscheidet allein der Schalter „Oberflächenstruktur“ — ansehen lässt sich das Muster auch ohne ihn über „Muster in 3D ansehen“.',
   'Textur-Presets':
