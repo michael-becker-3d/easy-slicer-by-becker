@@ -1,0 +1,131 @@
+name: Fehler melden oder Feedback geben
+description: Etwas funktioniert nicht, sieht falsch aus oder du hast eine Beobachtung. Jede Rückmeldung hilft.
+title: "[Feedback] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke, dass du dir Zeit nimmst. Auch ein „läuft bei mir“ ist wertvoll — damit wissen wir, welche Hardware abgedeckt ist.
+
+        **Besonders gesucht: Farbwechselsysteme** (AMS, ACE, CFS, IFS, MMU, ERCF, Tradrack). Bitte das System und die Slot-Zahl unten unbedingt ausfüllen.
+
+  - type: input
+    id: drucker
+    attributes:
+      label: Drucker (Marke und Modell)
+      placeholder: "z. B. Flashforge AD5X, Anycubic Vyper, Prusa MK4"
+    validations:
+      required: true
+
+  - type: input
+    id: firmware
+    attributes:
+      label: Firmware und Version
+      placeholder: "z. B. Klipper v0.12, Marlin 2.1.2.1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: verbindung
+    attributes:
+      label: Wie war der Drucker verbunden?
+      options:
+        - USB (Marlin-Serial)
+        - Klipper im Netz
+        - Simulation (kein Drucker)
+        - Nicht verbunden
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: Slicer-Version
+      description: Steht im Release-Namen oder unten in der Oberfläche.
+      placeholder: "z. B. 0.2.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: farbwechsel
+    attributes:
+      label: Farbwechselsystem
+      description: Der Bereich mit den meisten offenen Fragen — bitte auch dann ausfüllen, wenn du einfarbig druckst.
+      options:
+        - Keins (Einzelfarbe)
+        - AMS (Bambu Lab)
+        - ACE (Anycubic)
+        - CFS (Creality)
+        - IFS (Flashforge)
+        - MMU / MMU2 / MMU3 (Prusa)
+        - ERCF
+        - Tradrack
+        - Anderes System
+    validations:
+      required: true
+
+  - type: input
+    id: slots
+    attributes:
+      label: Anzahl Slots beziehungsweise Fächer
+      placeholder: "z. B. 4"
+    validations:
+      required: false
+
+  - type: input
+    id: material
+    attributes:
+      label: Filament, Düse und Schichthöhe
+      placeholder: "z. B. PLA, 0,4 mm, 0,2 mm"
+    validations:
+      required: false
+
+  - type: textarea
+    id: schritte
+    attributes:
+      label: Was hast du gemacht?
+      description: Die Schritte, die zum Ergebnis geführt haben — gern mit Menüpunkten.
+      placeholder: |
+        1. Modell geladen …
+        2. Profil gewählt …
+        3. Slicen gedrückt …
+    validations:
+      required: true
+
+  - type: textarea
+    id: erwartet
+    attributes:
+      label: Was hast du erwartet?
+    validations:
+      required: true
+
+  - type: textarea
+    id: passiert
+    attributes:
+      label: Was ist tatsächlich passiert?
+      description: Meldung im Wortlaut, gemessene Werte, auffällige Stellen im Druck.
+    validations:
+      required: true
+
+  - type: textarea
+    id: gcode
+    attributes:
+      label: G-Code-Zeilen, Meldung oder Logauszug
+      description: Bei Druckproblemen hilft die betroffene Zeile samt Schichtnummer.
+      render: gcode
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: vorab
+    attributes:
+      label: Vor dem Melden geprüft
+      options:
+        - label: Ich nutze die neueste Version aus dem Bereich Releases.
+        - label: Ich habe den Fall im Simulationsmodus oder mit angehobenem Bett nachgestellt, wenn es den Druck betrifft.
+        - label: Ich habe einen Screenshot der Oberfläche beziehungsweise ein Foto des Drucks, falls es hilft.
+
+  - type: markdown
+    attributes:
+      value: |
+        **Bitte keine vertraulichen Daten mitschicken** — keine Kundenaufträge, keine Zugangsdaten, keine vollständigen Laufwerkspfade mit Namen.

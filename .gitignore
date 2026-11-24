@@ -29,3 +29,6 @@ docs/vorschau-*.png
 .DS_Store
 Thumbs.db
 
+
+# Interne Aufgabenliste – bleibt lokal
+AUFGABEN.md

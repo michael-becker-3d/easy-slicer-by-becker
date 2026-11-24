@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Bedienungsanleitung (17 Kapitel)
+    url: https://github.com/michael-becker-3d/easy-slicer-by-becker/blob/main/BEDIENUNGSANLEITUNG.md
+    about: Oberfläche, Kalibrier-Tests, Mehrfarbdruck, Tastenkürzel und Fehlersuche
+  - name: Farbwechselsysteme testen (Kapitel 12)
+    url: https://github.com/michael-becker-3d/easy-slicer-by-becker/blob/main/BEDIENUNGSANLEITUNG.md#12-mehrfarbig-und-farbwechselsysteme
+    about: Schritt-für-Schritt-Prüfliste für AMS, ACE, CFS, IFS und MMU

@@ -2,7 +2,7 @@
 
 ## Aufgabenliste zuerst lesen
 
-Die offene Arbeit steht in [`AUFGABEN.md`](AUFGABEN.md). Zu Beginn jeder
+Die offene Arbeit steht in `AUFGABEN.md` (nur lokal, nicht im Repository). Zu Beginn jeder
 Sitzung diese Datei lesen und den Status dort pflegen: eine Aufgabe pro
 Durchgang, IDs stabil lassen, Erledigtes nach unten verschieben statt löschen.
 
