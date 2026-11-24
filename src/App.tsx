@@ -1292,7 +1292,7 @@ export default function App() {
       setResult(null)
       setOutputInfo(null)
       setLayer(0)
-      setShowAll(false)
+      setShowAll(true)
       setActivePlate(0)
       setDirty(false)
       setCalibration(null)
@@ -4448,7 +4448,6 @@ export default function App() {
                     scvActive={isKlipperFlavor(printer.flavor)}
                     onLayer={(index) => {
                       setLayer(index)
-                      setShowAll(false)
                     }}
                     onClose={() => setCalibration(null)}
                   />
@@ -4506,7 +4505,6 @@ export default function App() {
                     layer={layer}
                     onLayer={(index) => {
                       setLayer(index)
-                      setShowAll(false)
                     }}
                     compare={compareResult}
                     onCompare={() => setCompareResult(result)}

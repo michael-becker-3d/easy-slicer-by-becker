@@ -564,7 +564,6 @@ export function GcodeView({ bed, printerName, origin, initialRequest, onInitialC
                 layer={layer}
                 onLayer={(index) => {
                   setLayer(index)
-                  setShowAll(false)
                 }}
                 compare={compareAnalysis}
                 onCompare={() => setCompareAnalysis(analysis)}
@@ -601,7 +600,6 @@ export function GcodeView({ bed, printerName, origin, initialRequest, onInitialC
                 value={Math.min(layer, Math.max(0, analysis.layers.length - 1))}
                 onChange={(e) => {
                   setLayer(Number(e.target.value))
-                  setShowAll(false)
                 }}
                 className="min-w-[120px] flex-1 cursor-pointer"
                 aria-label="Layer der G-Code-Vorschau"
