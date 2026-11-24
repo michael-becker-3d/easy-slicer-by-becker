@@ -1,0 +1,114 @@
+Easy-Slicer by Becker — Source-Available-Lizenz für Testversionen
+Version 1.0 · Stand: 24. November 2026
+
+Copyright (c) 2026 Michael Becker. Alle Rechte vorbehalten.
+
+Autor und Rechteinhaber: Michael Becker.
+Die technische Umsetzung erfolgte mit Unterstützung des KI-Assistenzsystems
+Buffy. Diese Nennung ist eine technische Credits-Angabe. Sie ist nicht als
+Urheber-, Miturheber- oder Rechteinhaberschaft zu verstehen.
+
+## Kurzfassung (nicht rechtsverbindlich)
+
+- Ansehen, herunterladen, selbst bauen und auf eigenen Geräten testen: erlaubt.
+- Eigene Änderungen für den eigenen Test: erlaubt.
+- Weiterverkauf, kommerzielle Nutzung, Weitergabe oder Veröffentlichung als
+  eigenes Produkt: nicht erlaubt.
+- Autor-, Lizenz- und Herkunftsvermerke dürfen nicht entfernt werden.
+
+Rechtsverbindlich ist ausschließlich der deutsche Text ab Abschnitt 1.
+
+## English summary (non-binding)
+
+You may view, download, build and test this software for private,
+non-commercial purposes, and modify it for your own testing. You may not sell,
+redistribute, sublicense or commercially exploit the software or derivative
+works. Keep the author, license and attribution notices. The German text below
+is legally binding.
+
+## 1. Gegenstand
+
+Diese Lizenz gilt für die Software „Easy-Slicer by Becker“, einschließlich des
+veröffentlichten Quellcodes, der Benutzeroberfläche, der Dokumentation und aller
+sonstigen Bestandteile, soweit in dieser Lizenz nichts anderes bestimmt ist.
+Für die Slice-Engine gilt zusätzlich `LICENSE-SLICE-ENGINE.md`.
+
+Die Software ist **keine Open-Source-Software**. Sie ist source-available: Der
+Quellcode ist öffentlich einsehbar, darf aber nur im Rahmen dieser Lizenz
+verwendet werden.
+
+## 2. Erlaubte Nutzung
+
+Michael Becker gewährt eine einfache, nicht ausschließliche, nicht übertragbare,
+widerrufliche und kostenlose Lizenz,
+
+1. den Quellcode anzusehen, zu lesen und zu prüfen;
+2. die Software für private, nicht kommerzielle Zwecke auf eigenen Geräten zu
+   bauen, auszuführen und zu testen;
+3. die Software für eigene Tests zu ändern, sofern die geänderten Dateien nicht
+   veröffentlicht oder weitergegeben werden;
+4. auf GitHub einen Fork anzulegen, um eigene Tests durchzuführen oder
+   Verbesserungen per Pull Request beizutragen. Ein Fork darf nicht als
+   eigenständiges Produkt veröffentlicht, verbreitet oder beworben werden.
+
+Die Nutzung in einem Produktivbetrieb, in einem gewerblichen Umfeld oder zur
+Erbringung bezahlter Leistungen ist nicht erlaubt.
+
+## 3. Nicht erlaubte Nutzung
+
+Untersagt sind, soweit gesetzlich zulässig, insbesondere:
+
+- Verkauf, Vermietung, Unterlizenzierung oder sonstige kommerzielle Verwertung
+  der Software oder von Teilen davon;
+- Weitergabe, Verbreitung oder öffentliche Zugänglichmachung der Software, von
+  Builds oder von abgeleiteten Fassungen außerhalb der in Abschnitt 2 erlaubten
+  Handlungen;
+- Veröffentlichung eines Forks oder einer abgeleiteten Fassung als eigenes
+  Produkt, unter eigenem Namen oder mit dem Anschein einer offiziellen Version;
+- Nutzung der Software oder einzelner Bestandteile als Grundlage für ein
+  konkurrierendes Produkt oder für die Entwicklung eines anderen Slicers;
+- Nutzung der Software oder ihrer Bestandteile zum Trainieren von Modellen der
+  künstlichen Intelligenz;
+- Entfernung oder Veränderung von Urheberrechts-, Lizenz- oder
+  Herkunftsvermerken;
+- Umgehung technischer Schutzmaßnahmen oder Zugriffsbeschränkungen.
+
+Zwingende gesetzliche Rechte, insbesondere Rechte aus dem Urheberrecht, aus
+Lizenzen Dritter und gesetzlich erlaubte Formen der Interoperabilität, bleiben
+unberührt.
+
+## 4. Beiträge
+
+Wer einen Pull Request oder einen sonstigen Beitrag einreicht, räumt Michael
+Becker das Recht ein, den Beitrag im Rahmen dieses Projekts und dieser Lizenz zu
+verwenden, zu bearbeiten und zu veröffentlichen. Ein Beitrag begründet keine
+weitergehenden Ansprüche.
+
+## 5. Drittanbieter
+
+Die Software enthält Komponenten von Drittanbietern. Deren Lizenzbedingungen
+stehen in `THIRD_PARTY_NOTICES.md` und bleiben von dieser Lizenz unberührt.
+Soweit Drittanbieter-Lizenzen zwingende Rechte einräumen, gehen sie dieser
+Lizenz vor.
+
+## 6. Gewährleistung und Haftung
+
+Die Software wird als Testversion „wie besehen“ und ohne Gewährleistung
+bereitgestellt. Es wird insbesondere keine Eignung für einen bestimmten Zweck,
+keine Fehlerfreiheit und keine sichere Funktion an Druckern, Filamenten oder
+anderen Geräten zugesichert.
+
+Die Haftung für Vorsatz und grobe Fahrlässigkeit sowie für Schäden aus der
+Verletzung von Leben, Körper oder Gesundheit bleibt unberührt. Im Übrigen wird
+die Haftung, soweit gesetzlich zulässig, ausgeschlossen. Zwingende gesetzliche
+Haftungstatbestände bleiben unberührt.
+
+## 7. Schlussbestimmungen
+
+Änderungen dieser Lizenz bedürfen der Schriftform. Sollte eine Bestimmung
+unwirksam sein, bleibt die Wirksamkeit der übrigen Bestimmungen unberührt; an
+die Stelle der unwirksamen Bestimmung tritt die gesetzlich zulässige Regelung,
+die dem wirtschaftlichen Zweck am nächsten kommt.
+
+Es gilt deutsches Recht, soweit zwingende gesetzliche Vorschriften nichts
+anderes vorschreiben.

@@ -1,0 +1,31 @@
+# Abhängigkeiten und Build-Ausgaben
+node_modules/
+dist/
+build/
+release/
+
+# Laufzeitdaten und lokale Konfiguration
+data/
+.env
+.env.local
+*.log
+
+# Lokale Arbeitsarchive — nicht für das öffentliche Repo
+backup/
+artifacts/
+Testdruck/
+.tmp/
+.tools/
+.cloud-attachments/
+
+# Screenshots und Notizen aus der Entwicklung
+screenshot*.png
+slicer-state.png
+tmp-hops.mjs
+slice-and-upload.mjs
+docs/vorschau-*.png
+
+# Betriebssystem
+.DS_Store
+Thumbs.db
+

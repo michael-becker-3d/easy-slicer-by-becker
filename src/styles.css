@@ -1,0 +1,351 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ink-950: #06080b;
+  --color-ink-900: #090c11;
+  --color-ink-850: #0d1117;
+  --color-ink-800: #11161d;
+  --color-ink-700: #182029;
+  --color-line: #33404f;
+  --color-amber: #ffb545;
+  --color-mint: #6fe3b0;
+  --color-sky: #5b8dff;
+  --color-rose: #ff7ad9;
+  --font-sans: "Inter", "Segoe UI", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", "JetBrains Mono", Menlo, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+html {
+  --ui-scale: 1;
+}
+
+/* Bei Vergrößerung würden vh-Flächen über den sichtbaren Bereich hinauswachsen.
+   Die min()-Regel lässt sie unter 100 % unverändert und begrenzt sie darüber. */
+.ui-max-h-80 {
+  max-height: min(80vh, calc(80vh / var(--ui-scale)));
+}
+.ui-max-h-92 {
+  max-height: min(92vh, calc(92vh / var(--ui-scale)));
+}
+.ui-max-h-menu {
+  max-height: min(calc(100vh - 16px), calc((100vh - 16px) / var(--ui-scale)));
+}
+
+/* Die gesamte Oberfläche inklusive Schriften, Abständen und Panels skalieren.
+   Bei CSS-Zoom bleibt 100 % bereits die Fenstergröße; eine zusätzliche
+   Division würde den verfügbaren Layoutplatz doppelt verkleinern. */
+#root {
+  width: 100%;
+  height: 100%;
+  zoom: var(--ui-scale);
+}
+
+/* Das Fenster scrollt nie selbst: Sonst schiebt ein zu hoher Bereich die
+   ganze Oberfläche nach oben und darunter bleibt leerer Raum. Gescrollt
+   wird immer nur in den Spalten (main bzw. dessen Kinder). */
+html,
+body {
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-ink-950);
+  color: #f2f6fb;
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  background-image:
+    radial-gradient(60rem 40rem at 12% -10%, rgba(255, 181, 69, 0.09), transparent 60%),
+    radial-gradient(50rem 36rem at 92% 0%, rgba(91, 141, 255, 0.10), transparent 62%),
+    radial-gradient(46rem 34rem at 60% 110%, rgba(111, 227, 176, 0.06), transparent 60%);
+  background-attachment: fixed;
+}
+
+canvas {
+  display: block;
+  touch-action: none;
+}
+
+input[type="range"] {
+  accent-color: var(--color-amber);
+  height: 4px;
+}
+
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #232a35;
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #33404f;
+  background-clip: content-box;
+}
+
+/* Ein gemeinsamer Studio-DOM-Baum. Die Portale der Panels bleiben stabil;
+   beim Layoutwechsel werden nur ihre Hosts zwischen den beiden unabhängigen
+   Spalten verschoben. So bleiben Komponenten und lokaler Zustand erhalten. */
+.studio-side {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.studio-slot {
+  min-width: 0;
+}
+
+.studio-layout--classic {
+  --studio-left: 370px;
+  --studio-right: 330px;
+}
+
+.studio-layout--workshop {
+  --studio-left: 350px;
+  --studio-right: 380px;
+}
+
+/* Auf schmalen Fenstern werden beide Spalten zu einer lesbaren Reihenfolge. */
+@media (max-width: 1023px) {
+  .studio-layout:not(.studio-layout--embedded) .studio-side {
+    display: contents;
+  }
+  /* Einspaltig zuerst der Arbeitsweg: Werkstück, Material, Vorschau,
+     Ergebnis; Absicht und Vorschläge bleiben als Feinjustierung darunter. */
+  .studio-slot--model {
+    order: 1;
+  }
+  .studio-slot--settings {
+    order: 2;
+  }
+  .studio-slot--viewport {
+    order: 3;
+    flex: 0 0 auto;
+  }
+  .studio-slot--result {
+    order: 4;
+  }
+  .studio-slot--intent {
+    order: 5;
+  }
+  .studio-slot--suggestions {
+    order: 6;
+  }
+}
+
+@media (min-width: 1024px) {
+  .studio-layout:not(.studio-layout--embedded) {
+    flex-direction: row;
+    align-items: flex-start;
+  }
+
+  .studio-layout:not(.studio-layout--embedded) .studio-side {
+    flex: 0 0 auto;
+    align-self: flex-start;
+  }
+
+  .studio-layout:not(.studio-layout--embedded) .studio-side--left {
+    order: 1;
+  }
+  .studio-layout:not(.studio-layout--embedded) .studio-slot--viewport {
+    order: 2;
+  }
+  .studio-layout:not(.studio-layout--embedded) .studio-side--right {
+    order: 3;
+  }
+
+  .studio-layout--classic .studio-side--left {
+    width: var(--studio-left);
+  }
+  .studio-layout--classic .studio-side--right {
+    width: var(--studio-right);
+  }
+  .studio-layout--workshop .studio-side--left {
+    width: var(--studio-left);
+  }
+  .studio-layout--workshop .studio-side--right {
+    width: var(--studio-right);
+  }
+}
+
+@media (min-width: 1024px) {
+  .studio-layout:not(.studio-layout--embedded) .studio-slot--viewport {
+    flex: 1 1 0;
+    position: sticky;
+    top: 0;
+    height: calc(100vh - 11.5rem);
+  }
+}
+
+.glass {
+  background: linear-gradient(180deg, rgba(23, 29, 38, 0.82), rgba(13, 17, 23, 0.72));
+  backdrop-filter: blur(18px);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Lesbarkeit: kleine Beschriftungen deutlich größer und die blassen Grautöne
+   klar heller. Die Rangfolge (Nebentext heller als Titel) bleibt erhalten. */
+.text-\[8px\] {
+  font-size: 11px !important;
+  line-height: 1.4 !important;
+}
+.text-\[9px\] {
+  font-size: 12px !important;
+  line-height: 1.4 !important;
+}
+.text-\[10px\] {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+.text-\[11px\] {
+  font-size: 14px !important;
+  line-height: 1.45 !important;
+}
+.text-xs {
+  font-size: 13px !important;
+  line-height: 1.45 !important;
+}
+.text-sm {
+  font-size: 15px !important;
+  line-height: 1.45 !important;
+}
+.text-white\/20,
+.text-white\/25,
+.text-white\/30 {
+  color: rgb(255 255 255 / 0.72) !important;
+}
+.text-white\/35,
+.text-white\/40,
+.text-white\/45 {
+  color: rgb(255 255 255 / 0.82) !important;
+}
+.text-white\/50,
+.text-white\/55 {
+  color: rgb(255 255 255 / 0.92) !important;
+}
+.placeholder\:text-white\/20::placeholder,
+.placeholder\:text-white\/25::placeholder {
+  color: rgb(255 255 255 / 0.6) !important;
+}
+
+/* ----------------------------------------------------------------
+   Helles Design
+   Die Tailwind-Farbvariablen werden überschrieben, damit alle
+   bg-ink-…/border-line-Klassen automatisch mitwechseln. Die
+   text-white-Klassen brauchen eigene Regeln, weil sie feste
+   RGB-Werte erzeugen. text-ink-950 wird auf den dunkleren
+   Amber-/Mint-Flächen im hellen Design weiß.
+   ---------------------------------------------------------------- */
+html.light {
+  --color-ink-950: #f2f5fa;
+  --color-ink-900: #ffffff;
+  --color-ink-850: #f8fafc;
+  --color-ink-800: #eef3f9;
+  --color-ink-700: #e1e8f1;
+  --color-line: #c3cfdd;
+  --color-amber: #b45309;
+  --color-mint: #087f5b;
+  --color-sky: #1d4ed8;
+  --color-rose: #be185d;
+  color-scheme: light;
+}
+
+html.light body {
+  background-color: #f2f5fa;
+  color: #162033;
+  background-image:
+    radial-gradient(60rem 40rem at 12% -10%, rgba(245, 158, 11, 0.12), transparent 60%),
+    radial-gradient(50rem 36rem at 92% 0%, rgba(37, 99, 235, 0.09), transparent 62%),
+    radial-gradient(46rem 34rem at 60% 110%, rgba(5, 150, 105, 0.07), transparent 60%);
+}
+
+html.light .glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.94), rgba(244, 247, 252, 0.9));
+  box-shadow: 0 10px 30px rgba(30, 41, 59, 0.06);
+}
+
+html.light .text-white {
+  color: #162033 !important;
+}
+html.light .text-white\/90,
+html.light .text-white\/85,
+html.light .text-white\/80,
+html.light .text-white\/75,
+html.light .text-white\/70,
+html.light .text-white\/60,
+html.light .text-white\/65 {
+  color: rgb(22 32 51 / 0.88) !important;
+}
+html.light .text-white\/50,
+html.light .text-white\/55 {
+  color: rgb(22 32 51 / 0.78) !important;
+}
+html.light .text-white\/35,
+html.light .text-white\/40,
+html.light .text-white\/45 {
+  color: rgb(22 32 51 / 0.68) !important;
+}
+html.light .text-white\/20,
+html.light .text-white\/25,
+html.light .text-white\/30 {
+  color: rgb(22 32 51 / 0.56) !important;
+}
+html.light .text-ink-950 {
+  color: #ffffff !important;
+}
+/* Verläufe im hellen Design dunkler halten, damit die weiße Schrift
+   auch am rechten Ende der Schaltfläche lesbar bleibt. */
+html.light [class*="from-amber"] {
+  background-image: linear-gradient(90deg, #b45309, #d97706) !important;
+}
+html.light [class*="from-mint"] {
+  background-image: linear-gradient(90deg, #087f5b, #0f9d76) !important;
+}
+html.light .placeholder\:text-white\/20::placeholder,
+html.light .placeholder\:text-white\/25::placeholder {
+  color: rgb(22 32 51 / 0.45) !important;
+}
+
+/* Weiße Schleier (Hover, aktive Reiter, Eingabefelder) werden im hellen
+   Design zu einem dezenten dunklen Schleier. */
+html.light [class*="bg-white/"] {
+  background-color: rgb(22 32 51 / 0.06) !important;
+}
+html.light [class*="border-white/"] {
+  border-color: rgb(22 32 51 / 0.12) !important;
+}
+
+html.light ::-webkit-scrollbar-thumb {
+  background: #bdc9d8;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+html.light ::-webkit-scrollbar-thumb:hover {
+  background: #9eafc2;
+  background-clip: content-box;
+}
