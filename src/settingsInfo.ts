@@ -351,9 +351,9 @@ export const SETTING_INFO: Record<string, string> = {
   'Objekte ausschließen':
     'Schreibt Firmware-Marker, mit denen sich einzelne Objekte am Drucker noch abwählen lassen (Klipper EXCLUDE_OBJECT_*, Marlin M486). Die eigentliche Auswahl bleibt weiterhin die Objektliste',
   Musteratlas:
-    'Zeigt alle 14 Oberflächenmuster als echte, aus derselben Textur-Engine berechnete Swatches. Ein Klick übernimmt nur das Muster in die Wandtextur; Tiefe, Merkmalsgröße, Richtung und Punktabstand bleiben stehen. Ob mit Struktur geslict wird, entscheidet allein der Schalter „Oberflächenstruktur“ — ansehen lässt sich das Muster auch ohne ihn über „Muster in 3D ansehen“.',
+    'Zeigt die Muster, für die es noch kein Preset gibt — derzeit Gehämmert, Wellen, Leder und Bruchstein. Ein Klick übernimmt nur das Muster in die Wandtextur; Tiefe, Merkmalsgröße, Richtung und Punktabstand bleiben stehen. Ob mit Struktur geslict wird, entscheidet allein der Schalter „Oberflächenstruktur“ — ansehen lässt sich das Muster auch ohne ihn über „Muster in 3D ansehen“.',
   'Textur-Presets':
-    'Kuratierte Looks aus Muster, Tiefe, Merkmalsgröße, Richtung und Punktabstand. Ein Preset setzt diese fünf Werte gemeinsam, schaltet aber nichts ein: Ob mit Struktur geslict wird, entscheidet allein der Schalter „Oberflächenstruktur“. Deckflächenmuster und Texturzonen bleiben unverändert.',
+    'Kuratierte Looks aus Muster, Tiefe, Merkmalsgröße, Richtung und Punktabstand und die Hauptauswahl im Fold. Ein Preset setzt diese fünf Werte gemeinsam, schaltet aber nichts ein: Ob mit Struktur geslict wird, entscheidet allein der Schalter „Oberflächenstruktur“. Muster ohne eigenes Preset stehen im Musteratlas darunter; Deckflächenmuster und Texturzonen bleiben unverändert.',
   Flächenzuweisung:
     'Legt das Oberflächenmuster nur auf ausgewählte Wandseiten: vorne (−Y), hinten (+Y), links (−X) und rechts (+X). Abgeschaltete Seiten bleiben glatt. Die Zuordnung folgt der Hauptrichtung der Wand; bei runden oder stark verwinkelten Teilen gilt die jeweils nächstliegende Seite. Die 3D-Ansicht zeigt das Muster vor dem Slicen, ohne das Mesh umzubauen.',
   'Input Shaper':

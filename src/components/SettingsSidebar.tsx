@@ -35,6 +35,14 @@ import {
   type SurfaceTexturePreset,
 } from '../../shared/surfaceTexture.ts'
 
+/**
+ * Muster ohne eigenes Preset. Nur sie stehen im Musteratlas, damit Atlas und
+ * Presets nicht dieselbe Auswahl doppelt anbieten.
+ */
+const ATLAS_ONLY_PATTERNS = SURFACE_TEXTURE_PATTERNS.filter(
+  (entry) => !SURFACE_TEXTURE_PRESETS.some((preset) => preset.pattern === entry.value),
+)
+
 type Limits = {
   layer: [number, number]
   nozzle: number[]
@@ -2472,8 +2480,8 @@ export function SettingsSidebar({
               {...common}
             />
                 <Fold
-                  title="Musteratlas & Swatches"
-                  hint={`${SURFACE_TEXTURE_PATTERNS.length} Muster`}
+                  title="Textur-Presets & Musteratlas"
+                  hint={`${SURFACE_TEXTURE_PRESETS.length} Presets · ${ATLAS_ONLY_PATTERNS.length} Muster`}
                   defaultOpen
                 >
                   <div className="col-span-full flex items-start justify-between gap-2 rounded-xl border border-sky/30 bg-sky/[0.05] px-2.5 py-2">
@@ -2500,56 +2508,6 @@ export function SettingsSidebar({
                   <div className="col-span-full rounded-xl border border-line/60 bg-ink-900/35 p-2">
                     <div className="flex items-center gap-1">
                       <span className="text-[9px] font-semibold tracking-wider text-white/55 uppercase">
-                        Musteratlas
-                      </span>
-                      <InfoDot label="Musteratlas" />
-                      <span className="ml-auto text-[8px] text-white/25">
-                        {SURFACE_TEXTURE_PATTERNS.length} Swatches
-                      </span>
-                    </div>
-                    <p className="mt-0.5 text-[8px] leading-snug text-white/30">
-                      Klick übernimmt das Muster in die Wandtextur. Tiefe, Merkmalsgröße, Richtung und
-                      Punktabstand bleiben unverändert; ob mit Struktur geslict wird, entscheidet der Schalter
-                      „Oberflächenstruktur“.
-                    </p>
-                    <div className="mt-1.5 grid grid-cols-4 gap-1">
-                      {SURFACE_TEXTURE_PATTERNS.map((entry) => {
-                        const selected = texturePattern === entry.value
-                        return (
-                          <button
-                            key={entry.value}
-                            type="button"
-                            aria-pressed={selected}
-                            title={entry.hint}
-                            onClick={() => applyTexturePattern(entry.value)}
-                            className={`overflow-hidden rounded-md border text-left transition ${
-                              selected
-                                ? 'border-sky/65 bg-sky/10 ring-1 ring-sky/25'
-                                : 'border-line/60 bg-ink-900/50 hover:border-white/30'
-                            }`}
-                          >
-                            <TextureSwatch
-                              pattern={entry.value}
-                              scale={textureScale}
-                              angle={textureAngle}
-                              className="h-9"
-                            />
-                            <span
-                              className={`block min-h-[2.2em] px-1 py-0.5 text-[8px] leading-tight ${
-                                selected ? 'text-sky' : 'text-white/55'
-                              }`}
-                            >
-                              {entry.label}
-                            </span>
-                          </button>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  <div className="col-span-full rounded-xl border border-line/60 bg-ink-900/35 p-2">
-                    <div className="flex items-center gap-1">
-                      <span className="text-[9px] font-semibold tracking-wider text-white/55 uppercase">
                         Textur-Presets
                       </span>
                       <InfoDot label="Textur-Presets" />
@@ -2558,8 +2516,8 @@ export function SettingsSidebar({
                       </span>
                     </div>
                     <p className="mt-0.5 text-[8px] leading-snug text-white/30">
-                      Setzt Muster, Tiefe, Merkmalsgröße, Richtung und Punktabstand gemeinsam. Deckflächenmuster
-                      und Texturzonen bleiben erhalten.
+                      Fertige Looks: Muster, Tiefe, Merkmalsgröße, Richtung und Punktabstand in einem Klick.
+                      Deckflächenmuster und Texturzonen bleiben erhalten.
                     </p>
                     <div className="mt-1.5 grid grid-cols-2 gap-1.5">
                       {SURFACE_TEXTURE_PRESETS.map((preset) => {
@@ -2595,6 +2553,55 @@ export function SettingsSidebar({
                             </span>
                             <span className="block px-1.5 pb-1 text-[7px] leading-tight text-white/30">
                               {patternLabel} · {preset.thickness.toFixed(2).replace('.', ',')} mm
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="col-span-full rounded-xl border border-line/60 bg-ink-900/35 p-2">
+                    <div className="flex items-center gap-1">
+                      <span className="text-[9px] font-semibold tracking-wider text-white/55 uppercase">
+                        Musteratlas
+                      </span>
+                      <InfoDot label="Musteratlas" />
+                      <span className="ml-auto text-[8px] text-white/25">
+                        {ATLAS_ONLY_PATTERNS.length} Muster
+                      </span>
+                    </div>
+                    <p className="mt-0.5 text-[8px] leading-snug text-white/30">
+                      Für diese Muster gibt es noch kein Preset. Ein Klick übernimmt nur das Muster in die
+                      Wandtextur; Tiefe, Merkmalsgröße, Richtung und Punktabstand bleiben unverändert.
+                    </p>
+                    <div className="mt-1.5 grid grid-cols-4 gap-1">
+                      {ATLAS_ONLY_PATTERNS.map((entry) => {
+                        const selected = texturePattern === entry.value
+                        return (
+                          <button
+                            key={entry.value}
+                            type="button"
+                            aria-pressed={selected}
+                            title={entry.hint}
+                            onClick={() => applyTexturePattern(entry.value)}
+                            className={`overflow-hidden rounded-md border text-left transition ${
+                              selected
+                                ? 'border-sky/65 bg-sky/10 ring-1 ring-sky/25'
+                                : 'border-line/60 bg-ink-900/50 hover:border-white/30'
+                            }`}
+                          >
+                            <TextureSwatch
+                              pattern={entry.value}
+                              scale={textureScale}
+                              angle={textureAngle}
+                              className="h-9"
+                            />
+                            <span
+                              className={`block min-h-[2.2em] px-1 py-0.5 text-[8px] leading-tight ${
+                                selected ? 'text-sky' : 'text-white/55'
+                              }`}
+                            >
+                              {entry.label}
                             </span>
                           </button>
                         )
