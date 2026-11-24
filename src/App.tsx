@@ -448,6 +448,8 @@ export default function App() {
   // gewählten Schicht. Mit „nur aktuelle Schicht“ war die 3D-Ansicht direkt
   // nach dem Slicen fast leer und der Schieberegler schien nichts zu tun.
   const [showAll, setShowAll] = useState(true)
+  /** Muster nur ansehen: Textur am Modell, unabhängig von der Oberflächenstruktur. */
+  const [texturePreviewOn, setTexturePreviewOn] = useState(false)
   const [previewColorMode, setPreviewColorMode] = useState<PreviewColorMode>('kind')
   const [hiddenPreviewFeatures, setHiddenPreviewFeatures] = useState<PreviewFeatureKind[]>([])
   /** Vergleichsstand und Werkzeuge der erweiterten Vorschau (A-82). */
@@ -3413,6 +3415,8 @@ export default function App() {
       onDeleteQualityProfile={deleteQualityProfile}
       onChange={updateSettings}
       onReset={resetSettings}
+      texturePreview={texturePreviewOn}
+      onTexturePreview={setTexturePreviewOn}
       limits={{
         layer: printer.layerRange,
         nozzle: printer.nozzleOptions,
@@ -4125,7 +4129,7 @@ export default function App() {
                   splitPlane={splitGuide}
                   onSplitPlaneMove={(value) => splitMoveRef.current?.(value)}
                   texturePreview={
-                    settings.fuzzySkin.mode === 'off'
+                    settings.fuzzySkin.mode === 'off' && !texturePreviewOn
                       ? null
                       : {
                           pattern: settings.fuzzySkin.pattern ?? 'noise',

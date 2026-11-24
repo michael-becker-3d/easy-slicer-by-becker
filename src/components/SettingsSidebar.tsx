@@ -94,6 +94,9 @@ type Props = {
   /** Aktiver IFS/AMS-Slot; wird im Filament-Reiter hervorgehoben. */
   activeSlotId?: string
   onActiveSlot?: (slotId: string) => void
+  /** Muster nur ansehen: zeigt die Textur am Modell, ohne die Oberflächenstruktur zu slicen. */
+  texturePreview?: boolean
+  onTexturePreview?: (next: boolean) => void
 }
 
 type Path = string[]
@@ -832,6 +835,8 @@ export function SettingsSidebar({
   onPlateTemps,
   activeSlotId,
   onActiveSlot,
+  texturePreview = false,
+  onTexturePreview,
 }: Props) {
   const [mode, setMode] = useState<'simple' | 'profi'>('profi')
   const [role, setRole] = useState<keyof RoleGcodeSettings>('outerWall')
@@ -892,6 +897,7 @@ export function SettingsSidebar({
   const texturePattern = settings.fuzzySkin.pattern ?? 'noise'
   const textureScale = settings.fuzzySkin.scale ?? 3
   const textureAngle = settings.fuzzySkin.angle ?? 0
+  const fuzzyActive = settings.fuzzySkin.mode !== 'off'
   const textureFaces = settings.fuzzySkin.faces ?? {
     enabled: false,
     front: true,
@@ -906,7 +912,6 @@ export function SettingsSidebar({
     })
   const sameNumber = (a: number, b: number) => Math.abs(a - b) < 1e-9
   const isActiveTexturePreset = (preset: SurfaceTexturePreset) =>
-    settings.fuzzySkin.mode !== 'off' &&
     texturePattern === preset.pattern &&
     sameNumber(settings.fuzzySkin.thickness, preset.thickness) &&
     sameNumber(settings.fuzzySkin.pointDistance, preset.pointDistance) &&
@@ -917,9 +922,9 @@ export function SettingsSidebar({
       ...settings,
       fuzzySkin: {
         ...settings.fuzzySkin,
-        // Ein Preset ist ein Ein-Klick-Look; bei ausgeschalteter Struktur wird
-        // nur die Außenwand aktiviert. Zonen und Deckflächenmuster bleiben.
-        mode: settings.fuzzySkin.mode === 'off' ? 'external' : settings.fuzzySkin.mode,
+        // Nur Werte übernehmen: Ob mit Struktur geslict wird, entscheidet
+        // allein der Schalter „Oberflächenstruktur“. Sonst schaltete ein Klick
+        // auf ein Preset ungewollt Fuzzy Skin ein, nur um das Muster anzusehen.
         pattern: preset.pattern,
         thickness: preset.thickness,
         pointDistance: preset.pointDistance,
@@ -932,7 +937,6 @@ export function SettingsSidebar({
       ...settings,
       fuzzySkin: {
         ...settings.fuzzySkin,
-        mode: settings.fuzzySkin.mode === 'off' ? 'external' : settings.fuzzySkin.mode,
         pattern,
       },
     })
@@ -2472,6 +2476,27 @@ export function SettingsSidebar({
                   hint={`${SURFACE_TEXTURE_PATTERNS.length} Muster`}
                   defaultOpen
                 >
+                  <div className="col-span-full flex items-start justify-between gap-2 rounded-xl border border-sky/30 bg-sky/[0.05] px-2.5 py-2">
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1 text-[10px] font-medium text-white/70">
+                        Muster in 3D ansehen
+                        <InfoDot label="Muster in 3D ansehen" />
+                      </span>
+                      <span className="mt-0.5 block text-[9px] leading-snug text-white/30">
+                        {fuzzyActive
+                          ? 'Die Oberflächenstruktur ist aktiv — das Muster ist am Modell immer sichtbar.'
+                          : 'Zeigt das Muster am Modell, ohne die Oberflächenstruktur zu slicen.'}
+                      </span>
+                    </span>
+                    <span className={fuzzyActive ? 'opacity-40' : ''}>
+                      <Toggle
+                        checked={fuzzyActive || texturePreview}
+                        onChange={(next) => {
+                          if (!fuzzyActive) onTexturePreview?.(next)
+                        }}
+                      />
+                    </span>
+                  </div>
                   <div className="col-span-full rounded-xl border border-line/60 bg-ink-900/35 p-2">
                     <div className="flex items-center gap-1">
                       <span className="text-[9px] font-semibold tracking-wider text-white/55 uppercase">
@@ -2483,8 +2508,9 @@ export function SettingsSidebar({
                       </span>
                     </div>
                     <p className="mt-0.5 text-[8px] leading-snug text-white/30">
-                      Klick übernimmt das Muster in die Wandtextur und aktiviert die Struktur bei Bedarf.
-                      Tiefe, Merkmalsgröße, Richtung und Punktabstand bleiben unverändert.
+                      Klick übernimmt das Muster in die Wandtextur. Tiefe, Merkmalsgröße, Richtung und
+                      Punktabstand bleiben unverändert; ob mit Struktur geslict wird, entscheidet der Schalter
+                      „Oberflächenstruktur“.
                     </p>
                     <div className="mt-1.5 grid grid-cols-4 gap-1">
                       {SURFACE_TEXTURE_PATTERNS.map((entry) => {
@@ -2577,8 +2603,8 @@ export function SettingsSidebar({
                   </div>
                   {settings.fuzzySkin.mode === 'off' && (
                     <div className="col-span-full rounded-lg border border-sky/25 bg-sky/[0.04] px-2 py-1.5 text-[8px] leading-snug text-sky/70">
-                      Die Oberflächenstruktur ist noch deaktiviert. Ein Klick auf ein Muster oder Preset schaltet
-                      „Nur Außenwand“ ein; die übrigen Einstellungen bleiben erhalten.
+                      Die Oberflächenstruktur ist noch deaktiviert. Mit „Muster in 3D ansehen“ oben prüfst du
+                      das Muster am Modell; geslict wird es erst, wenn du die Struktur einschaltest.
                     </div>
                   )}
                 </Fold>
