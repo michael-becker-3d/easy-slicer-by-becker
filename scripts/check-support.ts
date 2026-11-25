@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { box } from '../server/meshlib.ts'
-import { planSupport, type SupportPlan } from '../server/slicer/support.ts'
+import { layerSilhouettes, planSupport, type SupportPlan } from '../server/slicer/support.ts'
 import { makeMesh } from '../server/slicer/stl.ts'
 import { sliceMesh } from '../server/slicer/index.ts'
 import { signedArea, type Poly } from '../server/slicer/clipper.ts'
@@ -184,6 +184,26 @@ function main(): void {
     const occupied = plan.area.some((p) => p.length) || plan.interfaceArea.some((p) => p.length)
     assert.ok(occupied, `Schmaler ${kind}-Überhang darf nicht ohne Stütze bleiben`)
   }
+
+  // Andere Farben sind Sperrfläche: Dort darf keine Stütze wachsen, sonst
+  // stünde eine Säule in der falschen Farbe mitten im Bauteil.
+  const obstacle = layers.map((_, index) => (index < 3 ? [square(14)] : []))
+  const blocked = planSupport(layers, base, null, null, obstacle)
+  const blockedArea = [0, 1, 2, 3].reduce(
+    (sum, i) => sum + area([...blocked.area[i], ...blocked.interfaceArea[i]]),
+    0,
+  )
+  assert.equal(blockedArea, 0, `Stütze steht in der anderen Farbe: ${blockedArea} mm²`)
+  const free = planSupport(layers, base)
+  assert.ok(area([...free.area[1], ...free.interfaceArea[1]]) > 0, 'Ohne Sperrfläche muss die Stütze stehen')
+
+  // Grundriss je Schicht aus dem Netz: 10 × 10 mm Quader über vier Schichten.
+  const silhouetteMesh = makeMesh(new Float32Array(box(10, 10, 10, 0, 0, 0).flat()))
+  const silhouetteLayers = [0, 1, 2, 3].map((index) => ({ z: (index + 1) * 0.2, height: 0.2 }))
+  const silhouettes = layerSilhouettes(silhouetteMesh, silhouetteLayers)
+  assert.ok(silhouettes.every((polys) => polys.length > 0), 'Grundriss fehlt in einer Schicht')
+  const silhouetteArea = area(silhouettes[0])
+  assert.ok(Math.abs(silhouetteArea - 100) < 1, `Grundriss ${silhouetteArea} mm² statt 100 mm²`)
 
   // Muster werden tatsächlich verwendet: Zickzack erzeugt Verbindungsbahnen,
   // und das Kontaktmuster unterscheidet sich von Gitter.

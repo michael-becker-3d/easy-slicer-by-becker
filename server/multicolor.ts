@@ -59,6 +59,9 @@ export type ToolChangeResult = {
   filamentMm?: number
   seconds?: number
   volumeMm3?: number
+  /** Nach dem Wechsel ist der Extruder um diesen Betrag zurückgezogen (mm).
+   *  Der nächste Block setzt `G92 E0` — ohne Übernahme fehlt dieses Material. */
+  relief?: number
 }
 
 export type AssembleStats = {
@@ -169,6 +172,7 @@ export function assembleLayerwise(input: {
       .sort((a, b) => a.group.id - b.group.id)
 
     let headerWritten = false
+    let pendingRelief = 0
     for (const { group, section, layer } of active) {
       if (!section) continue
       if (group.id !== currentGroup) {
@@ -179,6 +183,7 @@ export function assembleLayerwise(input: {
           stats.towerFilamentMm += change.filamentMm ?? 0
           stats.towerSeconds += change.seconds ?? 0
           stats.towerVolumeMm3 += change.volumeMm3 ?? 0
+          pendingRelief = Math.max(0, change.relief ?? 0)
         }
         currentGroup = group.id
       }
@@ -187,7 +192,20 @@ export function assembleLayerwise(input: {
         headerWritten = true
       }
       const bodyStart = out.length
-      out.push(...section.body)
+      const relief = pendingRelief
+      let bodyExtra = 0
+      if (relief > 0 && /^G92 E0\b/.test(stripLineNumber(section.body[0] ?? ''))) {
+        // Der Wechsel hat den Extruder zurückgezogen, der Block setzt mit
+        // `G92 E0` auf null. Ohne diese Zeile fehlt das Material im ersten Pfad
+        // und jede Farbe beginnt mit einer Lücke.
+        out.push(section.body[0])
+        out.push(`G1 E-${relief.toFixed(3)} F1800 ; Rückzug nach dem Spülen übernehmen`)
+        out.push(...section.body.slice(1))
+        bodyExtra = 1
+      } else {
+        out.push(...section.body)
+      }
+      pendingRelief = 0
 
       if (layer) {
         merged.data.push(...layer.data)
@@ -201,7 +219,7 @@ export function assembleLayerwise(input: {
               mergedLines = undefined
               break
             }
-            mergedLines.push(line + shift)
+            mergedLines.push(line + shift + (bodyExtra && sourceIndex > section.bodyLine ? bodyExtra : 0))
           }
         } else {
           mergedLines = undefined

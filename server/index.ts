@@ -38,6 +38,8 @@ import { describeSequentialPlan, planSequentialOrder } from '../shared/sequentia
 import { filamentChangeGcode, normalizeMultiMaterial, planPurgeLine } from '../shared/multiMaterial.ts'
 import { planPurgeTowers, purgeTowerPatch, type PurgeTowerPlan } from '../shared/purgeTower.ts'
 import { assembleLayerwise, splitGcodeSections } from './multicolor.ts'
+import { layerSilhouettes } from './slicer/support.ts'
+import type { Poly } from './slicer/clipper.ts'
 import { runPostProcessing } from './postprocess.ts'
 import { FILAMENTS, NOZZLE_SIZES, PLATES, PRINTERS, customPrinterProfile, filamentById, plateById, printerById } from '../shared/catalog.ts'
 import { listPorts, type ConnectOptions } from './printer/manager.ts'
@@ -2514,10 +2516,36 @@ app.post('/api/slice', async (req, res) => {
         center: false,
         offset: objectShift,
       }).bands
+
       if (!bands.length) {
         res.status(400).json({ error: 'Keine Schichten berechnet — Modell und Einstellungen prüfen.' })
         return
       }
+
+      // Stützen je Farbe: Jede Farbe sieht die Grundrisse der anderen als
+      // Sperrfläche. Ohne das plant eine Farbe ihre Stützen quer durch das
+      // Bauteil der anderen — dort stünde dann eine Stütze in der falschen
+      // Farbe mitten im Teil.
+      const silhouettes =
+        groups.length > 1 && baseSettings.support && baseSettings.support.kind !== 'none'
+          ? groups.map((group) =>
+              layerSilhouettes(
+                transformMesh(group.mesh, { x: objectShift.x, y: objectShift.y, z: 0 }),
+                bands,
+              ),
+            )
+          : []
+      const supportObstacles = groups.map((_, index) => {
+        if (!silhouettes.length) return undefined
+        const merged: Poly[][] = bands.map(() => [])
+        silhouettes.forEach((list, other) => {
+          if (other === index) return
+          list.forEach((polys, layer) => {
+            for (const poly of polys) merged[layer].push(poly)
+          })
+        })
+        return merged
+      })
 
       // Purge-Turm: EIN Quader neben den Objekten, innen in ein Band je Farbe
       // geteilt. Jede Farbe spült nur in ihr Band — so braucht das Bett eine
@@ -2558,6 +2586,7 @@ app.post('/api/slice', async (req, res) => {
             center: false,
             offset: objectShift,
             bands,
+            supportObstacles: supportObstacles[index],
             resetExtruderEachLayer: true,
             subtract: cuts,
             customGcode,
@@ -2601,6 +2630,7 @@ app.post('/api/slice', async (req, res) => {
           let filamentMm = 0
           let seconds = 0
           let volumeMm3 = 0
+          let relief = Math.max(0, multi.retract)
           if (band) {
             const patch = purgeTowerPatch({
               band,
@@ -2617,9 +2647,10 @@ app.post('/api/slice', async (req, res) => {
             filamentMm = patch.filamentMm
             seconds = patch.seconds
             volumeMm3 = patch.volumeMm3
+            relief = patch.retractMm
           }
           lines.push(`G0 X${group.center.x.toFixed(2)} Y${group.center.y.toFixed(2)} F9000`)
-          return { lines, filamentMm, seconds, volumeMm3 }
+          return { lines, filamentMm, seconds, volumeMm3, relief }
         },
       })
 

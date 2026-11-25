@@ -169,6 +169,8 @@ export type PurgeTowerPatch = {
   volumeMm3: number
   /** Gedruckte Bahnlänge in mm. */
   pathMm: number
+  /** Tatsächlich zurückgezogen (mm) — der nächste Block muss das übernehmen. */
+  retractMm: number
 }
 
 /**
@@ -188,7 +190,7 @@ export function purgeTowerPatch(input: PurgeTowerPatchInput): PurgeTowerPatch {
   const y0 = input.band.y0 + inset
   const y1 = input.band.y1 - inset
   if (volume <= 0 || x1 - x0 < width || y1 - y0 < width) {
-    return { lines: [], filamentMm: 0, seconds: 0, volumeMm3: 0, pathMm: 0 }
+    return { lines: [], filamentMm: 0, seconds: 0, volumeMm3: 0, pathMm: 0, retractMm: 0 }
   }
 
   // Rand als geschlossener Ring, danach parallele Bahnen im Wechsel.
@@ -214,7 +216,7 @@ export function purgeTowerPatch(input: PurgeTowerPatchInput): PurgeTowerPatch {
       totalMm += Math.hypot(path[i].x - path[i - 1].x, path[i].y - path[i - 1].y)
     }
   }
-  if (!(totalMm > 0)) return { lines: [], filamentMm: 0, seconds: 0, volumeMm3: 0, pathMm: 0 }
+  if (!(totalMm > 0)) return { lines: [], filamentMm: 0, seconds: 0, volumeMm3: 0, pathMm: 0, retractMm: 0 }
 
   const filamentArea = Math.PI * (Math.max(0.5, input.filamentDiameter) / 2) ** 2
   const totalFilament = volume / filamentArea
@@ -240,7 +242,10 @@ export function purgeTowerPatch(input: PurgeTowerPatchInput): PurgeTowerPatch {
     }
   }
   // Rückzug auf den absoluten E-Stand (die Datei rechnet absolut) und Hub.
-  lines.push(`G1 E${Math.max(0, e - retract).toFixed(3)} F1800 ; Rückzug`)
+  // Der tatsächliche Rückzug ist der kleinere von beiden Werten: Bei einer
+  // sehr kleinen Spülung wurde weniger gefördert als der Wunsch-Rückzug.
+  const retractMm = Math.min(retract, e)
+  lines.push(`G1 E${(e - retractMm).toFixed(3)} F1800 ; Rückzug`)
   lines.push(`G1 Z${(z + lift).toFixed(3)} F600 ; Z-Hub nach dem Spülen`)
 
   return {
@@ -249,5 +254,6 @@ export function purgeTowerPatch(input: PurgeTowerPatchInput): PurgeTowerPatch {
     seconds: totalMm / Math.max(1, input.speed) + 3,
     volumeMm3: volume,
     pathMm: totalMm,
+    retractMm,
   }
 }

@@ -162,6 +162,8 @@ export function sliceMesh(
     metadata?: boolean
     /** Gemalte Stützen-Bereiche (Taste L) */
     paint?: PaintSupport
+    /** Grundrisse der anderen Farben je Schicht (Mehrfarbdruck). */
+    supportObstacles?: Poly[][]
     /** Diagnose/Test: erhält den tatsächlich geplanten Stützbereich. */
     onSupportPlan?: (plan: SupportPlan | null) => void
     /**
@@ -388,7 +390,7 @@ export function sliceMesh(
       : null
   const support =
     settings.support && settings.support.kind !== 'none'
-      ? planSupport(layers, settings.support, supportSeeds, opts.paint ?? null)
+      ? planSupport(layers, settings.support, supportSeeds, opts.paint ?? null, opts.supportObstacles ?? null)
       : null
   opts.onSupportPlan?.(support)
   if (support && support.overhangLayers === 0) {

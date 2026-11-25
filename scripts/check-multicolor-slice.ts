@@ -230,6 +230,14 @@ async function main(): Promise<void> {
       'Nach jedem Spülen muss die Düse angehoben werden',
     )
 
+    // 4b) Der Rückzug nach dem Spülen wird im nächsten Block übernommen.
+    // Ohne das fehlt jeder Farbe am Blockanfang genau der Rückzugsweg.
+    assert.equal(
+      count(gcode, /^G1 E-[\d.]+ F1800 ; Rückzug nach dem Spülen übernehmen$/gm),
+      towerFills,
+      'Nach jedem Farbwechsel muss der Rückzug übernommen werden',
+    )
+
     // 5) Kein E-Sprung (sonst würde die zweite Farbe überextrudieren).
     const jump = maxExtrusionJump(gcode)
     assert.ok(jump < 50, `E-Sprung von ${jump.toFixed(1)} mm — E-Nullpunkt je Schicht prüfen`)

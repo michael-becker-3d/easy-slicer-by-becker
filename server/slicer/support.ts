@@ -6,6 +6,7 @@
 import type { SupportSettings } from '../../shared/types.ts'
 import { booleanPolys, offsetPolys, signedArea, unionPolys, type Poly } from './clipper.ts'
 import type { Mesh } from './stl.ts'
+import { sliceAtZ } from './geom.ts'
 
 /** Gemalte Stützen-Markierung in Weltkoordinaten (Anteil → mm im Slicer). */
 export type PaintCircle = { x: number; y: number; z?: number; r: number }
@@ -134,6 +135,8 @@ export function planSupport(
   seeds?: Poly[][] | null,
   /** Gemalte Bereiche: erzwingen Stützen oder sperren sie aus. */
   marks?: PaintSupport | null,
+  /** Belegte Flächen der anderen Farben je Schicht — dort wächst keine Stütze. */
+  obstacles?: Poly[][] | null,
 ): SupportPlan {
   const n = layers.length
   const area: Poly[][] = Array.from({ length: n }, () => [])
@@ -223,6 +226,10 @@ export function planSupport(
       }
     }
 
+    const obstacle = obstacles?.[i]?.length ? obstacles[i] : null
+    // Andere Farben sind Sperrfläche. Die Säule endet an ihnen, statt durch
+    // ein fremdes Bauteil weiterzulaufen und dort in falscher Farbe zu landen.
+    if (carry.length && obstacle) carry = booleanPolys(carry, obstacle, 'diff')
     let zone = carry
     // Gemalte Stützen: senkrechte Säule von der Markierung bis zum Bett.
     // Der Anteil läuft über `carry` nach unten weiter, damit die Säule steht.
@@ -241,6 +248,8 @@ export function planSupport(
       const keepOff = offsetPolys(layers[i].inner, xy)
       if (keepOff.length) zone = booleanPolys(zone, keepOff, 'diff')
     }
+    // Auch erzwungene Stützen weichen der anderen Farbe.
+    if (zone.length && obstacle) zone = booleanPolys(zone, obstacle, 'diff')
     // Gemalte Blocker gewinnen: dort wächst keine Stütze, auch keine erzwungene.
     if (zone.length && marks?.block?.length) {
       const blocked = unionPolys(marks.block.map((m) => circlePoly(m.x, m.y, m.r)))
@@ -262,4 +271,18 @@ export function planSupport(
   }
 
   return plan
+}
+
+/**
+ * Belegte Fläche je Schicht. Der Mehrfarbdruck braucht den Grundriss jeder
+ * Farbe, damit die Stützen einer Farbe nicht im Bauteil einer anderen stehen.
+ * Geschnitten wird auf derselben Ebene wie die Konturen der Farbe selbst.
+ */
+export function layerSilhouettes(
+  mesh: Mesh,
+  layers: { z: number; height: number }[],
+): Poly[][] {
+  if (!mesh.triangles) return layers.map(() => [])
+  const report = { openChains: 0 }
+  return layers.map((layer) => sliceAtZ(mesh.positions, mesh.triangles, layer.z, report))
 }
