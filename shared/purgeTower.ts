@@ -3,10 +3,15 @@
  *
  * Beim Drucken nach Schichten wechselt die Farbe in jeder Schicht. Damit die
  * alte Farbe nicht in das Bauteil zieht, wird nach jedem Wechsel gespült — und
- * zwar in einen Turm neben den Objekten. Der Turm wächst mit der Schicht: je
- * Wechsel eine volle Fläche aus dem Spülvolumen. Weil das Spülvolumen die
- * Fläche bestimmt (Fläche = Volumen / Schichthöhe), kann der Turm nicht
- * beliebig schmal werden.
+ * zwar in einen Turm neben den Objekten.
+ *
+ * Es gibt genau EINEN Turm für alle Farben. Sein Querschnitt ist in Farbbänder
+ * geteilt (ein Band je Farbe, übereinander in Y); jede Farbe spült nur in ihr
+ * eigenes Band. So überlappt keine Spülung, und das Bett braucht eine freie
+ * Ecke statt einer eigenen Fläche je Farbe.
+ *
+ * Die Fläche folgt aus dem Spülvolumen: je Band Fläche = Volumen / Schichthöhe,
+ * also Kantenlänge = Wurzel(Farben × Volumen / Schichthöhe).
  *
  * Dieses Modul rechnet nur. Es kennt weder Server noch Oberfläche, damit sich
  * Platzierung und G-Code ohne Drucker prüfen lassen.
@@ -14,118 +19,133 @@
 
 export type PurgeTowerBox = { minX: number; minY: number; maxX: number; maxY: number }
 
-export type PurgeTowerCell = {
-  /** Werkzeug/Farbe, zu der dieser Turm gehört. */
+export type PurgeTowerBand = {
+  /** Farbgruppe — nicht die Werkzeugnummer: zwei Filamente können einen Slot teilen. */
   tool: number
-  /** Linke untere Ecke des Turmquerschnitts in Bettkoordinaten. */
+  /** 0-basierte Lage im Turm (0 = vorderstes Band). */
+  index: number
+  /** Linke Kante des Turms in X. */
+  x: number
+  /** Breite des Turms in X (= Kantenlänge). */
+  width: number
+  /** Unter- und Oberkante des Bandes in Y. */
+  y0: number
+  y1: number
+}
+
+export type PurgeTower = {
+  /** Linke untere Ecke des Turmquaders in Bettkoordinaten. */
   x: number
   y: number
-  /** Kantenlänge des quadratischen Querschnitts in mm. */
+  /** Kantenlänge in mm. */
   size: number
+  /** Ein Band je Farbe, lückenlos übereinander. */
+  bands: PurgeTowerBand[]
 }
 
 export type PurgeTowerPlan =
-  | { ok: true; cells: PurgeTowerCell[]; side: 'back' | 'front'; size: number }
+  | { ok: true; tower: PurgeTower; side: 'back' | 'front'; size: number; colors: number }
   | { ok: false; error: string; size: number }
 
 /** Rand des Turms zum Bett in mm. */
 export const TOWER_MARGIN = 6
+/** Größer lässt sich der Turm neben normalen Objekten nicht mehr unterbringen. */
+export const TOWER_MAX = 60
 
 function overlaps(a: PurgeTowerBox, b: PurgeTowerBox): boolean {
   return a.minX < b.maxX && a.maxX > b.minX && a.minY < b.maxY && a.maxY > b.minY
 }
 
-function cellBox(cell: PurgeTowerCell, gap: number): PurgeTowerBox {
-  return {
-    minX: cell.x - gap,
-    minY: cell.y - gap,
-    maxX: cell.x + cell.size + gap,
-    maxY: cell.y + cell.size + gap,
-  }
-}
-
 /**
- * Kantenlänge des Turms. Das Spülvolumen einer Schicht wird als volle Fläche
- * abgelegt: Fläche = Volumen / Schichthöhe. Unter 4 mm wird der Turm zu dünn
- * und kippt; über 45 mm passt er neben normalen Objekten nicht mehr.
+ * Kantenlänge des Turms. Jedes Farbband muss das Spülvolumen einer Schicht als
+ * volle Fläche aufnehmen: Fläche je Band = Volumen / Schichthöhe. Bei n Farben
+ * ist der Turm deshalb Wurzel(n × Volumen / Schichthöhe) groß — ein Turm für
+ * alle, nicht n einzelne. Unter 4 mm wird er zu dünn und kippt.
  */
-export function purgeTowerSize(volume: number, layerHeight: number): number {
+export function purgeTowerSize(volume: number, layerHeight: number, colors = 1): number {
   const height = Math.max(0.05, Number.isFinite(layerHeight) ? layerHeight : 0.2)
-  const area = Math.max(0, Number.isFinite(volume) ? volume : 0) / height
-  const side = Math.sqrt(area)
-  return Math.round(Math.max(4, Math.min(45, side)) * 2) / 2
+  const count = Math.max(1, Math.round(Number.isFinite(colors) ? colors : 1))
+  const area = (Math.max(0, Number.isFinite(volume) ? volume : 0) / height) * count
+  const side = Math.ceil(Math.sqrt(area) * 2) / 2
+  return Math.max(4, Math.min(TOWER_MAX, side))
 }
 
 export type PurgeTowerPlanInput = {
   bed: { x: number; y: number }
   /** Belegte Bereiche der Objekte in Bettkoordinaten (inkl. Haftrand). */
   objects: PurgeTowerBox[]
-  /** Werkzeuge, die im Druck vorkommen — je Werkzeug ein eigener Turm. */
+  /** Farbgruppen im Druck — je Gruppe ein Band im gemeinsamen Turm. */
   tools: number[]
   volume: number
   layerHeight: number
-  /** Abstand zwischen Turm und Objekt bzw. zwischen zwei Türmen in mm. */
+  /** Abstand zwischen Turm und Objekten in mm. */
   gap?: number
   /** Rand zum Bett in mm. */
   margin?: number
 }
 
+function makeTower(x: number, y: number, size: number, tools: number[]): PurgeTower {
+  const bandHeight = size / tools.length
+  const bands: PurgeTowerBand[] = tools.map((tool, index) => {
+    const y0 = y + index * bandHeight
+    return {
+      tool,
+      index,
+      x,
+      width: size,
+      y0,
+      y1: index === tools.length - 1 ? y + size : y0 + bandHeight,
+    }
+  })
+  return { x, y, size, bands }
+}
+
 /**
- * Sucht für jedes Werkzeug einen freien Platz, zuerst an der hinteren
+ * Sucht EINEN freien Platz für den gemeinsamen Turm, zuerst an der hinteren
  * Bettkante, dann an der vorderen. Der Turm steht immer vollständig auf dem
  * Bett und berührt kein Objekt; findet sich kein Platz, wird der Slice
  * abgelehnt statt ohne Turm zu drucken.
  */
 export function planPurgeTowers(input: PurgeTowerPlanInput): PurgeTowerPlan {
-  const size = purgeTowerSize(input.volume, input.layerHeight)
-  const gap = Math.max(0, Number.isFinite(input.gap ?? 3) ? (input.gap ?? 3) : 3)
-  const margin = Math.max(1, Number.isFinite(input.margin ?? TOWER_MARGIN) ? (input.margin ?? TOWER_MARGIN) : TOWER_MARGIN)
   const tools = [...new Set(input.tools)]
     .filter((tool) => Number.isFinite(tool))
     .sort((a, b) => a - b)
+  const size = purgeTowerSize(input.volume, input.layerHeight, Math.max(1, tools.length))
+  const gap = Math.max(0, Number.isFinite(input.gap ?? 3) ? (input.gap ?? 3) : 3)
+  const margin = Math.max(1, Number.isFinite(input.margin ?? TOWER_MARGIN) ? (input.margin ?? TOWER_MARGIN) : TOWER_MARGIN)
   if (!tools.length) return { ok: false, size, error: 'Kein Werkzeug für den Purge-Turm vorhanden.' }
   if (input.bed.x < size + 2 * margin || input.bed.y < size + 2 * margin) {
     return { ok: false, size, error: 'Das Bett ist zu klein für einen Purge-Turm.' }
   }
 
   for (const side of ['back', 'front'] as const) {
-    const cells: PurgeTowerCell[] = []
-    let fits = true
-    for (const tool of tools) {
-      const y = side === 'back' ? input.bed.y - margin - size : margin
-      let found = -1
-      for (let x = margin; x <= input.bed.x - margin - size + 1e-6; x += 0.5) {
-        const box: PurgeTowerBox = {
-          minX: x - gap,
-          minY: y - gap,
-          maxX: x + size + gap,
-          maxY: y + size + gap,
-        }
-        if (input.objects.some((object) => overlaps(object, box))) continue
-        if (cells.some((cell) => overlaps(cellBox(cell, gap), box))) continue
-        found = x
-        break
+    const y = side === 'back' ? input.bed.y - margin - size : margin
+    for (let x = margin; x <= input.bed.x - margin - size + 1e-6; x += 0.5) {
+      const box: PurgeTowerBox = {
+        minX: x - gap,
+        minY: y - gap,
+        maxX: x + size + gap,
+        maxY: y + size + gap,
       }
-      if (found < 0) {
-        fits = false
-        break
-      }
-      cells.push({ tool, x: Math.round(found * 100) / 100, y: Math.round(y * 100) / 100, size })
+      if (input.objects.some((object) => overlaps(object, box))) continue
+      const px = Math.round(x * 100) / 100
+      const py = Math.round(y * 100) / 100
+      return { ok: true, tower: makeTower(px, py, size, tools), side, size, colors: tools.length }
     }
-    if (fits) return { ok: true, cells, side, size }
   }
 
   return {
     ok: false,
     size,
     error:
-      `Kein freier Platz für ${tools.length} Purge-Türme (${size} × ${size} mm). ` +
+      `Kein freier Platz für einen Purge-Turm (${size} × ${size} mm für ${tools.length} Farben). ` +
       'Objekte weiter zur Bettmitte stellen, das Spülvolumen senken oder den Turm ausschalten.',
   }
 }
 
 export type PurgeTowerPatchInput = {
-  cell: PurgeTowerCell
+  /** Band der Farbe, die gerade gespült wird. */
+  band: PurgeTowerBand
   /** Oberkante der aktuellen Schicht in mm. */
   z: number
   /** Schichthöhe in mm. */
@@ -152,10 +172,10 @@ export type PurgeTowerPatch = {
 }
 
 /**
- * G-Code für eine Turmschicht. Der Querschnitt wird als geschlossener Rand und
- * parallele Bahnen gefüllt; die Extrusion wird so verteilt, dass genau das
- * Spülvolumen gefördert wird. Danach: Rückzug und Z-Hub, damit die Düse nicht
- * durch den frischen Wulst zum nächsten Objekt zieht.
+ * G-Code für eine Turmschicht: nur das Band dieser Farbe wird als geschlossener
+ * Rand und parallele Bahnen gefüllt; die Extrusion wird so verteilt, dass genau
+ * das Spülvolumen gefördert wird. Danach: Rückzug und Z-Hub, damit die Düse
+ * nicht durch den frischen Wulst zum nächsten Objekt zieht.
  */
 export function purgeTowerPatch(input: PurgeTowerPatchInput): PurgeTowerPatch {
   const volume = Math.max(0, Number.isFinite(input.volume) ? input.volume : 0)
@@ -163,10 +183,10 @@ export function purgeTowerPatch(input: PurgeTowerPatchInput): PurgeTowerPatch {
   const z = Math.max(0, Number.isFinite(input.z) ? input.z : 0)
   const width = Math.max(0.25, Math.max(0.1, input.nozzle) * 1.125)
   const inset = width / 2
-  const x0 = input.cell.x + inset
-  const x1 = input.cell.x + input.cell.size - inset
-  const y0 = input.cell.y + inset
-  const y1 = input.cell.y + input.cell.size - inset
+  const x0 = input.band.x + inset
+  const x1 = input.band.x + input.band.width - inset
+  const y0 = input.band.y0 + inset
+  const y1 = input.band.y1 - inset
   if (volume <= 0 || x1 - x0 < width || y1 - y0 < width) {
     return { lines: [], filamentMm: 0, seconds: 0, volumeMm3: 0, pathMm: 0 }
   }
@@ -204,7 +224,7 @@ export function purgeTowerPatch(input: PurgeTowerPatchInput): PurgeTowerPatch {
   const retract = Math.max(0, Number.isFinite(input.retract) ? input.retract : 2)
 
   const lines = [
-    `; Purge-Turm Werkzeug ${input.cell.tool + 1}`,
+    `; Purge-Turm Werkzeug ${input.band.tool + 1} · Band ${input.band.index + 1}`,
     `G0 Z${(z + lift + 2).toFixed(2)} F600`,
     `G0 X${x0.toFixed(2)} Y${y0.toFixed(2)} F9000`,
     `G1 Z${z.toFixed(3)} F600`,

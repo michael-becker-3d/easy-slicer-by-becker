@@ -261,11 +261,11 @@ export const SETTING_INFO: Record<string, string> = {
   'Spültempo|mm/s':
     'Tempo der Spüllinie. Langsam (15–25 mm/s) spült sauber und lässt die Düse nicht spritzen; schnell spart nur Sekunden und erzeugt eher Fäden.',
   Spülseite:
-    'Rand, an dem gespült wird — hinten oder vorne. Im schichtweisen Mehrfarbdruck bestimmt sie die Bettkante, an der die Türme stehen; überlappt eine Spüllinie ein Objekt, wird sie nicht geschrieben und der Slicer warnt.',
+    'Rand, an dem gespült wird — hinten oder vorne. Im schichtweisen Mehrfarbdruck bestimmt sie die Bettkante, an der der Turm steht; überlappt eine Spüllinie ein Objekt, wird sie nicht geschrieben und der Slicer warnt.',
   'Purge-Turm':
-    'Baut je Farbe einen Turm neben den Objekten auf. Nach jedem Farbwechsel in einer Schicht wird das Spülvolumen in den Turm gedruckt, statt in die Luft oder über das Bauteil. Der Turm wächst mit der Schicht mit und steht immer vollständig auf dem Bett; passt er nicht neben die Objekte, lehnt der Slicer den Auftrag mit einer Meldung ab, statt ohne Spülung zu drucken. Ohne Turm zieht die alte Farbe in die ersten Bahnen des Bauteils.',
+    'Baut einen gemeinsamen Turm neben den Objekten auf, innen in ein Band je Farbe geteilt. Nach jedem Farbwechsel in einer Schicht wird das Spülvolumen in das Band der neuen Farbe gedruckt, statt in die Luft oder über das Bauteil. So braucht das Bett nur eine freie Ecke statt einer Fläche je Farbe; der Turm wächst mit der Schicht mit und steht immer vollständig auf dem Bett. Passt er nicht neben die Objekte, lehnt der Slicer den Auftrag mit einer Meldung ab, statt ohne Spülung zu drucken. Ohne Turm zieht die alte Farbe in die ersten Bahnen des Bauteils.',
   'Turm-Abstand|mm':
-    'Abstand zwischen Purge-Turm und den Objekten sowie zwischen zwei Türmen. Größer ist sicherer, wenn Saum oder Brim am Objekt hängen; kleiner schafft Platz, wenn das Bett voll ist. Unter 2 mm sollte man nicht gehen, sonst kann die Düse den Turm am Bauteil vorbeistreifen.',
+    'Abstand zwischen Purge-Turm und den Objekten. Größer ist sicherer, wenn Saum oder Brim am Objekt hängen; kleiner schafft Platz, wenn das Bett voll ist. Unter 2 mm sollte man nicht gehen, sonst kann die Düse den Turm am Bauteil vorbeistreifen.',
   'Z-Hub nach Spülen|mm':
     'Hebt die Düse nach dem Spülen um diesen Betrag an, bevor sie zum nächsten Objekt fährt. Der frische Spülwulst liegt sonst genau auf Düsenhöhe und wird beim Wegfahren mitgerissen. 0,4–0,8 mm reichen; zu viel kostet nur Zeit.',
   'Objekt-Slot':

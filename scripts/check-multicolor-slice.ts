@@ -218,14 +218,15 @@ async function main(): Promise<void> {
     assert.ok(toolOne >= layers - 1, `T1 nur ${toolOne}× bei ${layers} Schichten`)
     assert.ok(Math.abs(toolOne - toolZero) <= 1, `T0 ${toolZero}× / T1 ${toolOne}× passen nicht zusammen`)
 
-    // 4) Purge-Turm je Farbe, mit Spülung und Z-Hub.
-    const towerOne = count(gcode, /^; Purge-Turm Werkzeug 1$/gm)
-    const towerTwo = count(gcode, /^; Purge-Turm Werkzeug 2$/gm)
-    assert.equal(towerOne + towerTwo, toolOne + toolZero, 'Je Wechsel muss genau eine Turmschicht entstehen')
-    assert.ok(towerOne > 0 && towerTwo > 0, 'Beide Farben brauchen einen eigenen Turm')
+    // 4) EIN Purge-Turm für alle Farben, je Farbe ein eigenes Band.
+    const towerFills = count(gcode, /^; Purge-Turm Werkzeug \d+ · Band \d+$/gm)
+    assert.equal(towerFills, toolOne + toolZero, 'Je Wechsel muss genau eine Turmschicht entstehen')
+    const bandOne = count(gcode, /^; Purge-Turm Werkzeug 1 · Band 1$/gm)
+    const bandTwo = count(gcode, /^; Purge-Turm Werkzeug 2 · Band 2$/gm)
+    assert.ok(bandOne > 0 && bandTwo > 0, 'Jede Farbe spült in ihr eigenes Band')
     assert.equal(
       count(gcode, /^G1 Z[\d.]+ F600 ; Z-Hub nach dem Spülen$/gm),
-      towerOne + towerTwo,
+      towerFills,
       'Nach jedem Spülen muss die Düse angehoben werden',
     )
 
@@ -233,17 +234,23 @@ async function main(): Promise<void> {
     const jump = maxExtrusionJump(gcode)
     assert.ok(jump < 50, `E-Sprung von ${jump.toFixed(1)} mm — E-Nullpunkt je Schicht prüfen`)
 
-    // 6) Turm steht auf dem Bett und die beiden Türme sind getrennt.
+    // 6) Ein Turm auf dem Bett, die Farbbänder liegen übereinander.
     const bed = 220
-    const towerMoves = [...gcode.matchAll(/^; Purge-Turm Werkzeug \d\nG0 Z[\d.]+ F600\nG0 X([\d.]+) Y([\d.]+)/gm)]
+    const towerMoves = [
+      ...gcode.matchAll(/^; Purge-Turm Werkzeug \d+ · Band \d+\nG0 Z[\d.]+ F600\nG0 X([\d.]+) Y([\d.]+)/gm),
+    ]
     assert.ok(towerMoves.length > 0, 'Turmposition nicht gefunden')
     for (const match of towerMoves) {
       const x = Number(match[1])
       const y = Number(match[2])
       assert.ok(x > 0 && x < bed && y > 0 && y < bed, `Turm außerhalb des Betts: ${x}/${y}`)
     }
-    const firstX = new Set(towerMoves.slice(0, 2).map((match) => Number(match[1])))
-    assert.equal(firstX.size, 2, 'Die beiden Türme müssen nebeneinander stehen')
+    const towerX = new Set(towerMoves.map((match) => Number(match[1])))
+    assert.equal(towerX.size, 1, 'Alle Farben müssen im selben Turm spülen (gleiche linke Kante)')
+    const towerY = new Set(towerMoves.map((match) => Number(match[2])))
+    assert.equal(towerY.size, 2, 'Zwei Farben = zwei Bänder im Turm')
+    const bandSpread = Math.max(...towerY) - Math.min(...towerY)
+    assert.ok(bandSpread > 2 && bandSpread < 20, `Bänder liegen nicht sauber übereinander: ${bandSpread} mm`)
 
     // 7) Objektmarker für ZMOD vor START_PRINT.
     const definitions = count(gcode, /^EXCLUDE_OBJECT_DEFINE NAME=/gm)
@@ -289,12 +296,96 @@ async function main(): Promise<void> {
     assert.ok(zValues.length > 0, 'Keine Z-Bewegungen im G-Code')
     assert.ok(Math.min(...zValues) >= 0.1, `Z zu tief: ${Math.min(...zValues)} mm`)
 
+    // ---- Vier Farben: ein Turm mit vier Bändern, echte Wechsel T0…T3 ----
+    const fourObjects: ObjectInfo[] = [a, b]
+    while (fourObjects.length < 4) {
+      const more = await requestJson<{ objects: ObjectInfo[] }>(
+        `/api/models/${upload.id}/objects/import?name=farbe-${fourObjects.length + 1}.stl&printerId=flashforge-ad5x`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'model/stl' },
+          body: demoSTL('wuerfel'),
+        },
+      )
+      const added = more.objects.find((object) => !fourObjects.some((known) => known.id === object.id))
+      assert.ok(added, 'Das zusätzliche Objekt fehlt')
+      fourObjects.push(added)
+    }
+    const fourSlots = [
+      { id: 'slot-a', label: 'Rot', profileId: 'pla', color: '#ff0000' },
+      { id: 'slot-b', label: 'Blau', profileId: 'pla', color: '#0000ff' },
+      { id: 'slot-c', label: 'Gelb', profileId: 'pla', color: '#ffff00' },
+      { id: 'slot-d', label: 'Grün', profileId: 'pla', color: '#00ff00' },
+    ]
+    const fourPositions = [
+      { x: -30, y: -30 },
+      { x: 30, y: -30 },
+      { x: -30, y: 30 },
+      { x: 30, y: 30 },
+    ]
+    await requestJson(`/api/models/${upload.id}/objects`, {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({
+        objects: fourObjects.map((object, index) => ({
+          id: object.id,
+          visible: true,
+          offsetX: fourPositions[index].x,
+          offsetY: fourPositions[index].y,
+          slotId: fourSlots[index].id,
+          filamentId: 'pla',
+        })),
+      }),
+    })
+    const fourSliced = await requestJson<SliceResponse>('/api/slice', {
+      method: 'POST',
+      headers: JSON_HEADERS,
+      body: JSON.stringify({ ...sliceBody, slots: fourSlots, activeSlotId: 'slot-a' }),
+    })
+    const four = fourSliced.gcode
+    const fourLayers = fourSliced.layers.length
+    assert.ok(fourLayers > 20, `Vierfarbdruck hat nur ${fourLayers} Schichten`)
+    assert.equal(count(four, /^;LAYER:\d+$/gm), fourLayers, 'Vierfarbdruck: ein Schichtmarker je Schicht')
+    assert.equal(
+      count(four, /^; ---- Objektwechsel ----$/gm),
+      0,
+      'Auch vier Farben dürfen nicht Objekt für Objekt drucken',
+    )
+    const fourFills = count(four, /^; Purge-Turm Werkzeug \d+ · Band \d+$/gm)
+    assert.ok(fourFills > 0, 'Vierfarbdruck ohne Turmspülung')
+    const fourBands = new Set([...four.matchAll(/^; Purge-Turm Werkzeug \d+ · Band (\d+)$/gm)].map((m) => m[1]))
+    assert.equal(fourBands.size, 4, `Vierfarbdruck: ${fourBands.size} Bänder statt 4`)
+    const fourMoves = [
+      ...four.matchAll(/^; Purge-Turm Werkzeug \d+ · Band \d+\nG0 Z[\d.]+ F600\nG0 X([\d.]+) Y([\d.]+)/gm),
+    ]
+    assert.equal(new Set(fourMoves.map((m) => Number(m[1]))).size, 1, 'Vier Farben müssen einen Turm teilen')
+    assert.equal(new Set(fourMoves.map((m) => Number(m[2]))).size, 4, 'Vier Farben brauchen vier Bänder')
+    for (const match of fourMoves) {
+      assert.ok(
+        Number(match[1]) > 0 && Number(match[1]) < 220 && Number(match[2]) > 0 && Number(match[2]) < 220,
+        `Vierfarbdruck: Turm außerhalb des Betts (${match[1]}/${match[2]})`,
+      )
+    }
+    const fourTools = [0, 1, 2, 3].map((tool) => count(four, new RegExp(`^T${tool} ; Werkzeugwechsel$`, 'gm')))
+    assert.ok(fourTools.every((value) => value > 0), `Nicht alle Werkzeuge wurden gewechselt: ${fourTools.join('/')}`)
+    assert.ok(
+      Math.abs(Math.max(...fourTools) - Math.min(...fourTools)) <= 1,
+      `Werkzeugwechsel ungleich verteilt: ${fourTools.join('/')}`,
+    )
+    assert.equal(count(four, /^EXCLUDE_OBJECT_DEFINE NAME=/gm), 4, 'Vierfarbdruck: vier Objektdefinitionen')
+    const fourJump = maxExtrusionJump(four)
+    assert.ok(fourJump < 50, `Vierfarbdruck: E-Sprung von ${fourJump.toFixed(1)} mm`)
+    const fourZ = [...four.matchAll(/^G[01] Z(-?\d+(?:\.\d+)?)/gm)].map((match) => Number(match[1]))
+    assert.ok(Math.min(...fourZ) >= 0.1, `Vierfarbdruck: Z zu tief (${Math.min(...fourZ)} mm)`)
+    writeFileSync(resolve('.tmp/multicolor-4-farben.gcode'), four)
+
     // Beleg für die Sichtprüfung: der echte G-Code des Zwei-Farben-Drucks.
     writeFileSync(resolve('.tmp/multicolor-2-farben.gcode'), gcode)
 
     console.log(
       `OK: Mehrfarbdruck je Schicht — ${layers} Schichten, ${toolOne}× T1 / ${toolZero}× T0, ` +
-        `${towerOne + towerTwo} Turmschichten, max. E-Sprung ${jump.toFixed(2)} mm, ` +
+        `${towerFills} Turmschichten in einem Turm, max. E-Sprung ${jump.toFixed(2)} mm, ` +
+        `4 Farben: ${fourLayers} Schichten mit ${fourBands.size} Bändern und T0…T3, ` +
         'sequenzieller Modus gesperrt, ZMOD-Definitionen vor START_PRINT.',
     )
   } finally {

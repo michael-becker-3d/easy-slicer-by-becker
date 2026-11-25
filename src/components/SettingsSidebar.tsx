@@ -2472,7 +2472,7 @@ export function SettingsSidebar({
                     label="Purge-Turm"
                     value={settings.multiMaterial.tower.enabled}
                     path={['multiMaterial', 'tower', 'enabled']}
-                    hint="Je Farbe ein Turm neben den Objekten. Ohne Turm zieht die alte Farbe ins Bauteil."
+                    hint="Ein Turm für alle Farben, innen in ein Band je Farbe geteilt. Ohne Turm zieht die alte Farbe ins Bauteil."
                     {...common}
                   />
                   {settings.multiMaterial.tower.enabled && (

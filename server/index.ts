@@ -2519,7 +2519,9 @@ app.post('/api/slice', async (req, res) => {
         return
       }
 
-      // Purge-Turm: je Farbe ein eigener Querschnitt neben den Objekten.
+      // Purge-Turm: EIN Quader neben den Objekten, innen in ein Band je Farbe
+      // geteilt. Jede Farbe spült nur in ihr Band — so braucht das Bett eine
+      // freie Ecke statt einer eigenen Fläche je Farbe.
       let towerPlan: PurgeTowerPlan | null = null
       if (multi.tower.enabled && multi.purge.enabled && multi.purge.volume > 0) {
         towerPlan = planPurgeTowers({
@@ -2584,9 +2586,9 @@ app.post('/api/slice', async (req, res) => {
           const lines: string[] = ['; ---- Farbwechsel ----']
           lines.push('G92 E0', `G1 E-${Math.max(0, multi.retract).toFixed(2)} F1800`)
           lines.push(`G1 Z${(z + multi.zLift + 1).toFixed(2)} F600`)
-          const cell = towerPlan?.ok ? towerPlan.cells.find((entry) => entry.tool === group.tool) : undefined
-          const parkX = cell ? cell.x + cell.size / 2 : group.center.x
-          const parkY = cell ? cell.y + cell.size / 2 : group.center.y
+          const band = towerPlan?.ok ? towerPlan.tower.bands.find((entry) => entry.tool === group.id) : undefined
+          const parkX = band ? band.x + band.width / 2 : group.center.x
+          const parkY = band ? (band.y0 + band.y1) / 2 : group.center.y
           lines.push(`G0 X${parkX.toFixed(2)} Y${parkY.toFixed(2)} F9000`)
           lines.push(
             ...filamentChangeGcode({
@@ -2599,9 +2601,9 @@ app.post('/api/slice', async (req, res) => {
           let filamentMm = 0
           let seconds = 0
           let volumeMm3 = 0
-          if (cell) {
+          if (band) {
             const patch = purgeTowerPatch({
-              cell,
+              band,
               z,
               height,
               volume: multi.purge.volume,

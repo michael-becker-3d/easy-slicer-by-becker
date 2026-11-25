@@ -220,6 +220,17 @@ const size = purgeTowerSize(60, 0.2)
 check('60 mm³ bei 0,2 mm ergeben 17,5 mm Kantenlänge', near(size, 17.5), String(size))
 const smallSize = purgeTowerSize(8, 0.2)
 check('kleines Volumen wird nicht beliebig dünn', smallSize >= 4, String(smallSize))
+check(
+  'zwei Farben: 24,5 mm Kantenlänge',
+  near(purgeTowerSize(60, 0.2, 2), 24.5),
+  String(purgeTowerSize(60, 0.2, 2)),
+)
+check(
+  'vier Farben: 35 mm Kantenlänge',
+  near(purgeTowerSize(60, 0.2, 4), 35),
+  String(purgeTowerSize(60, 0.2, 4)),
+)
+check('acht Farben bleiben im Bettmaß', purgeTowerSize(60, 0.2, 8) <= 60)
 
 const towerObjects = [{ minX: 80, minY: 80, maxX: 140, maxY: 140 }]
 const towerPlan = planPurgeTowers({
@@ -230,20 +241,48 @@ const towerPlan = planPurgeTowers({
   layerHeight: 0.2,
   gap: 3,
 })
-check('zwei Türme finden Platz', towerPlan.ok && towerPlan.cells.length === 2)
+check('zwei Farben bekommen EINEN Turm', towerPlan.ok && towerPlan.tower.bands.length === 2)
 if (towerPlan.ok) {
-  const inside = towerPlan.cells.every(
-    (cell) => cell.x >= 0 && cell.y >= 0 && cell.x + cell.size <= 220 && cell.y + cell.size <= 220,
+  const { tower } = towerPlan
+  check(
+    'Turm steht vollständig auf dem Bett',
+    tower.x >= 0 && tower.y >= 0 && tower.x + tower.size <= 220 && tower.y + tower.size <= 220,
   )
-  check('Türme stehen vollständig auf dem Bett', inside)
-  const [first, second] = towerPlan.cells
-  const apart = first.x + first.size <= second.x || second.x + second.size <= first.x
-  check('Türme überlappen sich nicht', apart)
-  const clear = towerPlan.cells.every(
-    (cell) =>
-      cell.x + cell.size < 80 || cell.x > 140 || cell.y + cell.size < 80 || cell.y > 140,
+  check(
+    'Turm hält Abstand zu den Objekten',
+    tower.x + tower.size < 80 || tower.x > 140 || tower.y + tower.size < 80 || tower.y > 140,
   )
-  check('Türme halten Abstand zu den Objekten', clear)
+  const [first, second] = tower.bands
+  check('Bänder liegen im selben Turm', first.x === second.x && first.width === second.width)
+  check('Bänder überlappen sich nicht', near(first.y1, second.y0))
+  check('Bänder füllen den Turm genau', near(first.y0, tower.y) && near(second.y1, tower.y + tower.size))
+  check(
+    'jedes Band hat die Fläche für das Spülvolumen',
+    first.width * (first.y1 - first.y0) >= 20 / 0.2 - 0.01,
+  )
+}
+
+const fourPlan = planPurgeTowers({
+  bed: { x: 220, y: 220 },
+  objects: towerObjects,
+  tools: [0, 1, 2, 3],
+  volume: 20,
+  layerHeight: 0.2,
+  gap: 3,
+})
+check('vier Farben bekommen einen Turm mit vier Bändern', fourPlan.ok && fourPlan.tower.bands.length === 4)
+if (fourPlan.ok) {
+  const { tower } = fourPlan
+  const bands = tower.bands
+  const contiguous = bands.every((band, index) =>
+    index === 0 ? near(band.y0, tower.y) : near(band.y0, bands[index - 1].y1),
+  )
+  check('vier Bänder liegen lückenlos übereinander', contiguous && near(bands[3].y1, tower.y + tower.size))
+  check(
+    'jedes der vier Bänder trägt das Spülvolumen',
+    bands.every((band) => band.width * (band.y1 - band.y0) >= 20 / 0.2 - 0.01),
+  )
+  check('Turm bleibt ein Quadrat', near(tower.size, purgeTowerSize(20, 0.2, 4)))
 }
 
 const noRoom = planPurgeTowers({
@@ -255,16 +294,10 @@ const noRoom = planPurgeTowers({
 })
 check('volles Bett wird abgelehnt statt ohne Turm zu drucken', !noRoom.ok && !!noRoom.error)
 
-const patchPlan = planPurgeTowers({
-  bed: { x: 220, y: 220 },
-  objects: [{ minX: 80, minY: 80, maxX: 140, maxY: 140 }],
-  tools: [0, 1],
-  volume: 20,
-  layerHeight: 0.2,
-})
-if (patchPlan.ok) {
+if (fourPlan.ok) {
+  const band = fourPlan.tower.bands[2]
   const towerPatch = purgeTowerPatch({
-    cell: patchPlan.cells[1],
+    band,
     z: 4.1,
     height: 0.2,
     volume: 20,
@@ -280,6 +313,18 @@ if (patchPlan.ok) {
   check('Turmspülung setzt den E-Nullpunkt', towerPatch.lines.includes('G92 E0'))
   check('Turmspülung hebt die Düse danach an', /Z-Hub nach dem Spülen/.test(patchText))
   check('Turmspülung endet über der Schichthöhe', /G1 Z4\.7\d* F600 ; Z-Hub nach dem Spülen/.test(patchText))
+  const moves = [...patchText.matchAll(/^G[01] X(-?[\d.]+) Y(-?[\d.]+)/gm)]
+  const insideBand = moves.every((match) => {
+    const x = Number(match[1])
+    const y = Number(match[2])
+    return (
+      x >= band.x - 0.01 &&
+      x <= band.x + band.width + 0.01 &&
+      y >= band.y0 - 0.01 &&
+      y <= band.y1 + 0.01
+    )
+  })
+  check('Turmspülung bleibt im eigenen Band', moves.length > 0 && insideBand)
   check('Turmspülung liegt auf dem Bett', towerPatch.pathMm > 0 && !/NaN|Infinity/.test(patchText))
 }
 
