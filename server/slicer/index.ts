@@ -33,7 +33,7 @@ import {
   type PrintPath,
 } from './gcode.ts'
 import { scaleMesh, transformMesh, type Mesh } from './stl.ts'
-import { planLayers } from './layerPlan.ts'
+import { planLayers, type LayerBand, type LayerPlan } from './layerPlan.ts'
 import { heightRangeSettings } from '../../shared/heightRanges.ts'
 import { applyPrinterLimits } from '../../shared/limits.ts'
 import { orderThin, planWalls } from './walls.ts'
@@ -91,6 +91,55 @@ export function compensateFirstLayer(
   return [...offsetPolys(outer, delta), ...holes]
 }
 
+export type SlicePlacement = { placed: Mesh; cuts: Mesh[]; warnings: string[] }
+
+/**
+ * Schrumpfkompensation und Bettlage eines Netzes. Getrennt von `sliceMesh`,
+ * damit der Mehrfarbdruck die Schichthöhen einmal für alle Farben berechnen
+ * kann; sonst läge jede Farbe auf einem eigenen Raster.
+ */
+export function placeForSlice(
+  mesh: Mesh,
+  settings: PrintSettings,
+  profile: PrinterProfile,
+  opts: { center?: boolean; offset?: { x: number; y: number }; subtract?: Mesh[] } = {},
+): SlicePlacement {
+  const warnings: string[] = []
+  const shrink = settings.shrinkage ?? { x: 0, y: 0, z: 0 }
+  const factor = (v: number) => 1 + (Number.isFinite(v) ? v : 0) / 100
+  const fx = factor(shrink.x)
+  const fy = factor(shrink.y)
+  const fz = factor(shrink.z)
+  const source = Math.abs(fx - 1) > 1e-6 || Math.abs(fy - 1) > 1e-6 || Math.abs(fz - 1) > 1e-6 ? scaleMesh(mesh, fx, fy, fz) : mesh
+  if (Math.max(Math.abs(shrink.x), Math.abs(shrink.y), Math.abs(shrink.z)) > 5) {
+    warnings.push(
+      `Schrumpfkompensation über 5 % — das Modell wird deutlich größer. Prüfen, ob der Wert wirklich zum Material passt.`,
+    )
+  }
+  const { min, max } = source.bbox
+  const offsetX = Number.isFinite(opts.offset?.x) ? opts.offset!.x : 0
+  const offsetY = Number.isFinite(opts.offset?.y) ? opts.offset!.y : 0
+  const shiftX = (opts.center === false ? 0 : profile.bed.x / 2 - (min.x + max.x) / 2) + offsetX
+  const shiftY = (opts.center === false ? 0 : profile.bed.y / 2 - (min.y + max.y) / 2) + offsetY
+  const placed = transformMesh(source, { x: shiftX, y: shiftY, z: -min.z })
+  const cuts = (opts.subtract ?? []).map((m) => transformMesh(m, { x: shiftX, y: shiftY, z: -min.z }))
+  return { placed, cuts, warnings }
+}
+
+/**
+ * Schichtplanung für ein Netz, ohne G-Code zu schreiben. Der Mehrfarbdruck
+ * übergibt diese Bänder an alle Farben, damit sie Schicht für Schicht exakt
+ * übereinander liegen.
+ */
+export function planSliceBands(
+  mesh: Mesh,
+  settings: PrintSettings,
+  profile: PrinterProfile,
+  opts: { center?: boolean; offset?: { x: number; y: number } } = {},
+): LayerPlan {
+  return planLayers(placeForSlice(mesh, settings, profile, opts).placed, settings, MAX_LAYERS)
+}
+
 export function sliceMesh(
   mesh: Mesh,
   settings: PrintSettings,
@@ -115,6 +164,15 @@ export function sliceMesh(
     paint?: PaintSupport
     /** Diagnose/Test: erhält den tatsächlich geplanten Stützbereich. */
     onSupportPlan?: (plan: SupportPlan | null) => void
+    /**
+     * Feste Schichtplanung. Mehrfarbdruck schneidet jede Farbe einzeln; nur mit
+     * derselben Schichtliste liegen alle Farben exakt übereinander.
+     */
+    bands?: LayerBand[]
+    /** `G92 E0` am Schichtanfang — Grundlage für das Einsetzen einzelner Schichten. */
+    resetExtruderEachLayer?: boolean
+    /** Fläche für die Prime-Linie (z. B. alle Objekte statt nur einer Farbe). */
+    footprint?: { min: { x: number; y: number }; max: { x: number; y: number } }
   } = {},
 ): SliceResult {
   const warnings: string[] = []
@@ -136,39 +194,19 @@ export function sliceMesh(
     warnings.push('Vasenmodus: eine Außenwand ohne Füllung und Deckschichten, Z steigt spiralförmig über die Wand an.')
   }
 
-  // Schrumpfkompensation: Modell vor dem Slicen in X/Y und Z aufweiten
-  const shrink = settings.shrinkage ?? { x: 0, y: 0, z: 0 }
-  const factor = (v: number) => 1 + (Number.isFinite(v) ? v : 0) / 100
-  const fx = factor(shrink.x)
-  const fy = factor(shrink.y)
-  const fz = factor(shrink.z)
-  const source = Math.abs(fx - 1) > 1e-6 || Math.abs(fy - 1) > 1e-6 || Math.abs(fz - 1) > 1e-6 ? scaleMesh(mesh, fx, fy, fz) : mesh
-  if (Math.max(Math.abs(shrink.x), Math.abs(shrink.y), Math.abs(shrink.z)) > 5) {
-    warnings.push(
-      `Schrumpfkompensation über 5 % — das Modell wird deutlich größer. Prüfen, ob der Wert wirklich zum Material passt.`,
-    )
-  }
-
-  const { min, max, size } = source.bbox
-
-  // Modell auf die Bettmitte setzen, Unterseite auf z = 0. Beim Mehrfarbdruck
-  // bleibt die Objektlage erhalten, damit nacheinander an den richtigen
-  // Stellen gedruckt wird.
-  const offsetX = Number.isFinite(opts.offset?.x) ? opts.offset!.x : 0
-  const offsetY = Number.isFinite(opts.offset?.y) ? opts.offset!.y : 0
-  const shiftX = (opts.center === false ? 0 : profile.bed.x / 2 - (min.x + max.x) / 2) + offsetX
-  const shiftY = (opts.center === false ? 0 : profile.bed.y / 2 - (min.y + max.y) / 2) + offsetY
-  const placed = transformMesh(source, { x: shiftX, y: shiftY, z: -min.z })
-  // Negativkörper (eingelassener Text) liegen im selben Koordinatensystem wie
-  // das Modell vor dem Zentrieren — sie müssen denselben Versatz bekommen.
-  const cuts = (opts.subtract ?? []).map((m) => transformMesh(m, { x: shiftX, y: shiftY, z: -min.z }))
+  // Schrumpf, Bettlage und Negativkörper an einer Stelle. Der Mehrfarbdruck
+  // braucht dieselbe Rechnung, um seine Schichtplanung vorab zu bestimmen.
+  const placement = placeForSlice(mesh, settings, profile, opts)
+  warnings.push(...placement.warnings)
+  const placed = placement.placed
+  const cuts = placement.cuts
 
   // Extrusionsbreite: eigene Linienbreite, sonst Düsendurchmesser
   const lineW = settings.lineWidth > 0 ? settings.lineWidth : settings.nozzle
   // Die Prime-Linie wird vor dem Schreiben anhand des tatsächlichen
   // Modell-Fußabdrucks in eine freie Randspur gelegt. So kollidiert sie nicht
   // mit einem breiten Modell oder einem Brim.
-  const primeLine = settings.primeLine?.enabled ? planPrimeLine(placed.bbox, profile, settings) : null
+  const primeLine = settings.primeLine?.enabled ? planPrimeLine(opts.footprint ?? placed.bbox, profile, settings) : null
   if (settings.primeLine?.enabled && !primeLine) {
     warnings.push(
       'Prime-Linie: neben dem Modell ist kein freier Randstreifen für die Düsenreinigung — sie wird ausgelassen. Modell verkleinern oder Prime-Linie ausschalten.',
@@ -217,7 +255,9 @@ export function sliceMesh(
   // Die Schichtplanung kennt feste und adaptive Höhen. Sie arbeitet auf dem
   // platzierten Netz, damit Neigungen und Modelloberkante exakt zu den
   // Schnittebenen passen. Die erste Schicht bleibt immer unverändert.
-  const planned = planLayers(placed, settings, MAX_LAYERS)
+  const planned = opts.bands?.length
+    ? { bands: opts.bands, warnings: [] as string[] }
+    : planLayers(placed, settings, MAX_LAYERS)
   const zs = planned.bands
   warnings.push(...planned.warnings)
 
@@ -363,6 +403,7 @@ export function sliceMesh(
     profile,
     bedMesh,
     overrides,
+    resetExtruderEachLayer: opts.resetExtruderEachLayer === true,
     // Die erste Schicht bleibt von Höhenbereichen ausgenommen; ab Schicht 2
     // liefert die gemeinsame Helper-Funktion die passenden Werte.
     layerSettings: (z) =>

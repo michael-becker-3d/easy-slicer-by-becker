@@ -253,7 +253,7 @@ export const SETTING_INFO: Record<string, string> = {
   'Rückzug vor Wechsel|mm':
     'Zieht das Filament vor dem Wechsel zurück, damit beim Parken und Spülen kein Material nachläuft. 1–3 mm reichen bei Direct Drive; bei Bowden mehr. Zu viel Rückzug kann Luft in die Düse ziehen, dann fehlt beim Anfahren Material.',
   'Nach dem Wechsel spülen':
-    'Fährt nach jedem Farbwechsel eine Spüllinie am Bettrand, bevor das nächste Objekt beginnt. Ohne Spülen bleibt alte Farbe in der Düse und zieht in die ersten Millimeter des neuen Teils. Die Linie wird nur gelegt, wenn dort kein Objekt steht.',
+    'Spült nach jedem Farbwechsel, bevor die neue Farbe ins Bauteil geht. Ohne Spülen bleibt alte Farbe in der Düse und zieht in die ersten Millimeter des neuen Teils. Im schichtweisen Mehrfarbdruck geht das Spülmaterial in den Purge-Turm; beim Druck Objekt für Objekt (nur einfarbig möglich) an den freien Bettrand.',
   'Spülvolumen|mm³':
     'Materialmenge, die je Wechsel verworfen wird. 40–80 mm³ reichen bei direktem Übergang von einer Farbe zur nächsten meist aus; bei großem Farbunterschied (schwarz nach weiß) lieber 100–150 mm³. Mehr kostet Material und Zeit, spart aber Fehldrucke.',
   'Spüllänge|mm':
@@ -261,9 +261,15 @@ export const SETTING_INFO: Record<string, string> = {
   'Spültempo|mm/s':
     'Tempo der Spüllinie. Langsam (15–25 mm/s) spült sauber und lässt die Düse nicht spritzen; schnell spart nur Sekunden und erzeugt eher Fäden.',
   Spülseite:
-    'Rand, an dem gespült wird — hinten oder vorne. Die Objekte sollten auf der gegenüberliegenden Seite stehen; überlappt die Linie ein Objekt, wird sie nicht geschrieben und der Slicer warnt.',
+    'Rand, an dem gespült wird — hinten oder vorne. Im schichtweisen Mehrfarbdruck bestimmt sie die Bettkante, an der die Türme stehen; überlappt eine Spüllinie ein Objekt, wird sie nicht geschrieben und der Slicer warnt.',
+  'Purge-Turm':
+    'Baut je Farbe einen Turm neben den Objekten auf. Nach jedem Farbwechsel in einer Schicht wird das Spülvolumen in den Turm gedruckt, statt in die Luft oder über das Bauteil. Der Turm wächst mit der Schicht mit und steht immer vollständig auf dem Bett; passt er nicht neben die Objekte, lehnt der Slicer den Auftrag mit einer Meldung ab, statt ohne Spülung zu drucken. Ohne Turm zieht die alte Farbe in die ersten Bahnen des Bauteils.',
+  'Turm-Abstand|mm':
+    'Abstand zwischen Purge-Turm und den Objekten sowie zwischen zwei Türmen. Größer ist sicherer, wenn Saum oder Brim am Objekt hängen; kleiner schafft Platz, wenn das Bett voll ist. Unter 2 mm sollte man nicht gehen, sonst kann die Düse den Turm am Bauteil vorbeistreifen.',
+  'Z-Hub nach Spülen|mm':
+    'Hebt die Düse nach dem Spülen um diesen Betrag an, bevor sie zum nächsten Objekt fährt. Der frische Spülwulst liegt sonst genau auf Düsenhöhe und wird beim Wegfahren mitgerissen. 0,4–0,8 mm reichen; zu viel kostet nur Zeit.',
   'Objekt-Slot':
-    'Ordnet ein einzelnes Objekt einem Filament-Slot zu. Der Slicer druckt Objekte mit verschiedenen Slots nacheinander und setzt dazwischen einen Filamentwechsel; echtes Mehrfarben pro Schicht ist noch nicht enthalten.',
+    'Ordnet ein einzelnes Objekt einem Filament-Slot zu. Sobald zwei verschiedene Slots im Druck vorkommen, druckt der Slicer immer schichtweise: In jeder Schicht kommt jede Farbe einmal dran, dazwischen wird gewechselt und in den Purge-Turm gespült. Der Modus „Objekte nacheinander“ ist für Mehrfarbdruck gesperrt, weil der Kopf sonst über fertige Teile fahren müsste.',
   'Schichthöhe erste Schicht|mm':
     'Dicke der ersten Schicht. Dicker als die übrigen Schichten (0,2–0,3 mm) gleicht Bett-Unebenheiten aus und verbessert die Haftung. Zu dick = unsaubere Kanten und Überextrusion, zu dünn = die Spur reißt oder löst sich.',
   'Linienbreite erste Schicht|mm':

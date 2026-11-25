@@ -24,6 +24,14 @@ export type MultiMaterialSettings = {
   changeGcode: string
   /** Rückzug vor dem Wechsel in mm. */
   retract: number
+  /** Purge-Turm: nimmt das Spülvolumen jeder Schicht neben den Objekten auf. */
+  tower: {
+    enabled: boolean
+    /** Abstand zwischen Turm und Objekten in mm. */
+    gap: number
+  }
+  /** Düse nach dem Spülen anheben (mm), damit sie nicht durch den Wulst zieht. */
+  zLift: number
   purge: {
     enabled: boolean
     /** Spülvolumen je Wechsel in mm³. */
@@ -41,19 +49,26 @@ export const DEFAULT_MULTI_MATERIAL: MultiMaterialSettings = {
   change: 'm600',
   changeGcode: 'M600',
   retract: 2,
+  tower: { enabled: true, gap: 3 },
+  zLift: 0.6,
   purge: { enabled: true, volume: 60, length: 0, speed: 20, side: 'back' },
 }
 
 /** Ältere Profile kennen den Abschnitt noch nicht. */
 export function normalizeMultiMaterial(value?: Partial<MultiMaterialSettings> | null): MultiMaterialSettings {
   const purge = { ...DEFAULT_MULTI_MATERIAL.purge, ...(value?.purge ?? {}) }
+  const tower = { ...DEFAULT_MULTI_MATERIAL.tower, ...(value?.tower ?? {}) }
   const merged: MultiMaterialSettings = {
     ...DEFAULT_MULTI_MATERIAL,
     ...(value ?? {}),
+    tower,
     purge,
   }
   if (merged.change !== 'm600' && merged.change !== 'tool' && merged.change !== 'custom') merged.change = 'm600'
   if (!Number.isFinite(merged.retract)) merged.retract = DEFAULT_MULTI_MATERIAL.retract
+  if (!Number.isFinite(tower.gap) || tower.gap < 0) tower.gap = DEFAULT_MULTI_MATERIAL.tower.gap
+  if (typeof tower.enabled !== 'boolean') tower.enabled = DEFAULT_MULTI_MATERIAL.tower.enabled
+  if (!Number.isFinite(merged.zLift) || merged.zLift < 0) merged.zLift = DEFAULT_MULTI_MATERIAL.zLift
   if (!Number.isFinite(purge.volume) || purge.volume < 0) purge.volume = DEFAULT_MULTI_MATERIAL.purge.volume
   if (!Number.isFinite(purge.length) || purge.length < 0) purge.length = 0
   if (!Number.isFinite(purge.speed) || purge.speed <= 0) purge.speed = DEFAULT_MULTI_MATERIAL.purge.speed

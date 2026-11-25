@@ -117,15 +117,16 @@ async function main(): Promise<void> {
     assert.ok(first && second)
     assert.notEqual(first.id, second.id)
 
-    // Der Mehrfarbdruck-Pfad wird nur betreten, wenn die sichtbaren Objekte
-    // unterschiedliche Filament-IDs tragen. Objektlabels bleiben dabei an.
+    // Zwei Objekte nacheinander drucken (einfarbig): Nur so entstehen zwei
+    // getrennte Objektlabel-Blöcke mit eigener Zeilenkarte. Mehrfarbdruck
+    // wird immer schichtweise gedruckt und hat keine Objektblöcke mehr.
     await requestJson<ObjectsResponse>(`/api/models/${upload.id}/objects`, {
       method: 'POST',
       headers: JSON_HEADERS,
       body: JSON.stringify({
         objects: [
           { id: first.id, filamentId: 'pla' },
-          { id: second.id, filamentId: 'petg' },
+          { id: second.id, filamentId: 'pla' },
         ],
       }),
     })
@@ -142,6 +143,7 @@ async function main(): Promise<void> {
         infillDensity: 10,
         adhesion: 'none',
         primeLine: { enabled: false },
+        sequentialPrint: { enabled: true, clearance: 5 },
         output: { objectLabels: true, excludeObjects: false },
       },
       filaments: {

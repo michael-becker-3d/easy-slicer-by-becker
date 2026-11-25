@@ -83,6 +83,13 @@ export type LayerOverride = {
 }
 
 
+/**
+ * Größte Mesh-Abweichung, die noch als Bettschlag gilt. Ein gespeichertes
+ * Mesh mit mehreren Millimetern Offset ist ein Messfehler (falsche Nullage
+ * oder Einheit) und würde die Düse ins Bett ziehen.
+ */
+const MESH_REJECT_MM = 2
+
 /** Bilineare Z-Korrektur aus dem gemessenen Bett-Mesh. */
 export function sampleMesh(mesh: BedMesh, x: number, y: number): number {
   const { cols, rows, x0, y0, dx, dy, z } = mesh
@@ -133,6 +140,11 @@ export type WriterOptions = {
   customGcode?: CustomGcode
   /** Bereits auf freien Platz geprüfte Prime-Linie */
   primeLine?: PrimeLinePlan | null
+  /**
+   * Mehrfarbdruck je Schicht: `G92 E0` am Schichtanfang, damit jeder
+   * Schichtblock für sich absolut rechnet und beliebig eingesetzt werden kann.
+   */
+  resetExtruderEachLayer?: boolean
 }
 
 export class GcodeWriter {
@@ -195,6 +207,11 @@ export class GcodeWriter {
   /** Vasenmodus: Schichten, in denen die Spirale ganz ohne Mesh-Kompensation läuft. */
   private spiralMeshFallbackLayers = new Set<number>()
   private spiralMeshFallbackMaxDeviation = 0
+  /** Schichten, in denen ein Mesh-Wert Z unter 0 gezogen hätte (jeder Modus). */
+  private meshFloorLayers = new Set<number>()
+  private meshFloorMaxDeviation = 0
+  /** Gespeichertes Mesh war unplausibel und wurde nicht angewendet. */
+  private meshRejectedDeviation = 0
 
   constructor(private opts: WriterOptions) {
     this.settings = opts.settings
@@ -341,15 +358,46 @@ export class GcodeWriter {
     return pressureAdvanceGcode(this.opts.profile.flavor, v)
   }
 
+  /**
+   * Das gespeicherte Mesh nur anwenden, wenn es wie ein Bettschlag aussieht.
+   * Ein Mesh mit mehreren Millimetern Offset stammt aus einer falschen Messung
+   * (Nullage, Einheit, abgebrochener Lauf) und würde jede Schicht um genau
+   * diesen Betrag verschieben — im schlimmsten Fall unter das Bett.
+   */
+  private usableMesh(): BedMesh | null {
+    const mesh = this.opts.bedMesh
+    if (!mesh) return null
+    if (this.meshRejectedDeviation > 0) return null
+    let max = 0
+    for (const row of mesh.z) {
+      for (const value of row) {
+        const magnitude = Math.abs(value)
+        if (Number.isFinite(magnitude) && magnitude > max) max = magnitude
+      }
+    }
+    if (max > MESH_REJECT_MM) {
+      this.meshRejectedDeviation = max
+      return null
+    }
+    return mesh
+  }
+
   private zAt(x: number, y: number): number {
-    if (this.settings.meshCompensation === 'off' || !this.opts.bedMesh) return this.layerZ
-    const compensated = this.layerZ + sampleMesh(this.opts.bedMesh, x, y)
-    // Beim Vasen-Spiralstart darf die Düse nicht unter das Bett gezogen
-    // werden. Ein negativer Mesh-Offset würde hier sonst eine negative
-    // Z-Koordinate erzeugen; für diesen Punkt bleibt die nominelle Höhe.
-    if (this.settings.special?.vase && compensated < 0) {
-      this.meshClampLayers.add(this.layerIdx + 1)
-      this.meshClampMaxDeviation = Math.max(this.meshClampMaxDeviation, this.layerZ - compensated)
+    if (this.settings.meshCompensation === 'off') return this.layerZ
+    const mesh = this.usableMesh()
+    if (!mesh) return this.layerZ
+    const compensated = this.layerZ + sampleMesh(mesh, x, y)
+    // Ein Mesh-Wert unterhalb der Schichthöhe zieht Z unter 0 — die Düse fährt
+    // dann ins Bett. Ein gespeichertes Mesh mit mehreren Millimetern Offset ist
+    // ein Messfehler, kein Bettschlag. In beiden Fällen bleibt die Düse auf der
+    // nominellen Höhe, statt eine negative Z-Koordinate zu schreiben.
+    if (compensated < 0) {
+      this.meshFloorLayers.add(this.layerIdx + 1)
+      this.meshFloorMaxDeviation = Math.max(this.meshFloorMaxDeviation, this.layerZ - compensated)
+      if (this.settings.special?.vase) {
+        this.meshClampLayers.add(this.layerIdx + 1)
+        this.meshClampMaxDeviation = Math.max(this.meshClampMaxDeviation, this.layerZ - compensated)
+      }
       return this.layerZ
     }
     return compensated
@@ -564,6 +612,15 @@ export class GcodeWriter {
     this.line('')
     this.line(`;LAYER:${idx + 1}`)
     this.line(`; Z:${this.fmt(z, 2)}  Schicht ${idx + 1}`)
+    // Mehrfarbdruck: Jede Farbe wird als eigener Durchlauf geschnitten und
+    // später schichtweise eingesetzt. Mit E0 am Schichtanfang rechnet jeder
+    // Block absolut für sich — ohne diese Zeile würde der E-Stand der vorigen
+    // Farbe als Sprung gelesen und massiv überextrudiert.
+    if (this.opts.resetExtruderEachLayer) {
+      this.e = 0
+      this.retracted = false
+      this.line('G92 E0 ; Extruder-Nullpunkt je Schicht')
+    }
 
     // Höhenbereiche und Kalibrier-Overrides werden für jede Schicht neu auf
     // die Basis angewendet. Sonst würde ein Bereich nach seinem Ende mit den
@@ -1163,11 +1220,21 @@ export class GcodeWriter {
     )
   }
 
-  /** Klartext-Hinweise für den Slice-Bericht, wenn das Bett-Mesh im Vasenmodus weichen muss. */
+  /** Klartext-Hinweise für den Slice-Bericht, wenn das Bett-Mesh weichen muss. */
   get meshWarnings(): string[] {
     const warnings: string[] = []
     const layers = (count: number) => (count === 1 ? 'einer Schicht' : `${count} Schichten`)
     const mm = (value: number) => this.fmt(value, 2).replace('.', ',')
+    if (this.meshRejectedDeviation > 0) {
+      warnings.push(
+        `Bett-Mesh verworfen: Das gespeicherte Mesh weicht um ${mm(this.meshRejectedDeviation)} mm vom Bett ab (Grenze ${MESH_REJECT_MM} mm). So ein Wert ist ein Messfehler, kein Bettschlag; der G-Code rechnet deshalb ohne Ausgleich. Bett-Mesh neu messen und erst danach wieder einschalten.`,
+      )
+    }
+    if (!this.opts.settings.special?.vase && this.meshFloorLayers.size > 0) {
+      warnings.push(
+        `Bett-Mesh unplausibel: In ${layers(this.meshFloorLayers.size)} hätte der Ausgleich Z unter 0 gezogen (größte Abweichung ${mm(this.meshFloorMaxDeviation)} mm). Dort bleibt die Düse auf der nominellen Schichthöhe, der Ausgleich wirkt nicht. Bett-Mesh neu messen — mehrere Millimeter Offset sind ein Messfehler, kein Bettschlag.`,
+      )
+    }
     if (this.meshClampLayers.size > 0) {
       warnings.push(
         `Bett-Mesh im Vasenmodus begrenzt: In ${layers(this.meshClampLayers.size)} hätte ein negativer Mesh-Wert Z unter 0 gezogen. Dort bleibt die Düse auf der nominellen Schichthöhe (größte Mesh-Abweichung ${mm(this.meshClampMaxDeviation)} mm); der Ausgleich wirkt an diesen Stellen nicht. Der Abstand zum Bett kann örtlich abweichen — erste Schicht und Wandhaftung prüfen.`,

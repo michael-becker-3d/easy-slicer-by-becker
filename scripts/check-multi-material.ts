@@ -9,6 +9,7 @@ import {
   planPurgeLine,
   purgeLineLength,
 } from '../shared/multiMaterial.ts'
+import { planPurgeTowers, purgeTowerPatch, purgeTowerSize } from '../shared/purgeTower.ts'
 import { DEFAULT_SETTINGS, mergeSettings } from '../shared/types.ts'
 
 let failures = 0
@@ -205,6 +206,82 @@ const zero = planPurgeLine({
   layerHeight: 0.24,
 })
 check('Spülvolumen 0 schreibt nichts', zero.lines.length === 0)
+
+// --- Purge-Turm (schichtweiser Mehrfarbdruck) ---
+check('Purge-Turm ist standardmäßig an', merged.multiMaterial.tower.enabled === true)
+check('Turm-Abstand 3 mm', merged.multiMaterial.tower.gap === 3)
+check('Z-Hub nach Spülen 0,6 mm', merged.multiMaterial.zLift === 0.6)
+check(
+  'altes Profil bekommt einen Turm',
+  oldProfile.multiMaterial.tower.enabled === true && oldProfile.multiMaterial.zLift === 0.6,
+)
+
+const size = purgeTowerSize(60, 0.2)
+check('60 mm³ bei 0,2 mm ergeben 17,5 mm Kantenlänge', near(size, 17.5), String(size))
+const smallSize = purgeTowerSize(8, 0.2)
+check('kleines Volumen wird nicht beliebig dünn', smallSize >= 4, String(smallSize))
+
+const towerObjects = [{ minX: 80, minY: 80, maxX: 140, maxY: 140 }]
+const towerPlan = planPurgeTowers({
+  bed: { x: 220, y: 220 },
+  objects: towerObjects,
+  tools: [0, 1],
+  volume: 20,
+  layerHeight: 0.2,
+  gap: 3,
+})
+check('zwei Türme finden Platz', towerPlan.ok && towerPlan.cells.length === 2)
+if (towerPlan.ok) {
+  const inside = towerPlan.cells.every(
+    (cell) => cell.x >= 0 && cell.y >= 0 && cell.x + cell.size <= 220 && cell.y + cell.size <= 220,
+  )
+  check('Türme stehen vollständig auf dem Bett', inside)
+  const [first, second] = towerPlan.cells
+  const apart = first.x + first.size <= second.x || second.x + second.size <= first.x
+  check('Türme überlappen sich nicht', apart)
+  const clear = towerPlan.cells.every(
+    (cell) =>
+      cell.x + cell.size < 80 || cell.x > 140 || cell.y + cell.size < 80 || cell.y > 140,
+  )
+  check('Türme halten Abstand zu den Objekten', clear)
+}
+
+const noRoom = planPurgeTowers({
+  bed: { x: 220, y: 220 },
+  objects: [{ minX: 0, minY: 0, maxX: 220, maxY: 220 }],
+  tools: [0, 1],
+  volume: 20,
+  layerHeight: 0.2,
+})
+check('volles Bett wird abgelehnt statt ohne Turm zu drucken', !noRoom.ok && !!noRoom.error)
+
+const patchPlan = planPurgeTowers({
+  bed: { x: 220, y: 220 },
+  objects: [{ minX: 80, minY: 80, maxX: 140, maxY: 140 }],
+  tools: [0, 1],
+  volume: 20,
+  layerHeight: 0.2,
+})
+if (patchPlan.ok) {
+  const towerPatch = purgeTowerPatch({
+    cell: patchPlan.cells[1],
+    z: 4.1,
+    height: 0.2,
+    volume: 20,
+    speed: 40,
+    nozzle: 0.4,
+    filamentDiameter: 1.75,
+    retract: 1,
+    zLift: 0.6,
+  })
+  const patchText = towerPatch.lines.join('\n')
+  const expectedFilament = 20 / (Math.PI * (1.75 / 2) ** 2)
+  check('Turmspülung fördert genau das Spülvolumen', near(towerPatch.filamentMm, expectedFilament, 0.01))
+  check('Turmspülung setzt den E-Nullpunkt', towerPatch.lines.includes('G92 E0'))
+  check('Turmspülung hebt die Düse danach an', /Z-Hub nach dem Spülen/.test(patchText))
+  check('Turmspülung endet über der Schichthöhe', /G1 Z4\.7\d* F600 ; Z-Hub nach dem Spülen/.test(patchText))
+  check('Turmspülung liegt auf dem Bett', towerPatch.pathMm > 0 && !/NaN|Infinity/.test(patchText))
+}
 
 const allText = [...plan.lines, ...front.lines, ...second.lines, ...tool, ...custom].join('\n')
 check('keine NaN/Infinity im G-Code', !/NaN|Infinity/.test(allText))

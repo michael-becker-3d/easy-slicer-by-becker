@@ -26,6 +26,7 @@ import {
   featureRows,
   gcodeLineBreaks,
   gcodeLineOffsetBefore,
+  planSliceBands,
   shiftPreviewLines,
 } from './slicer/index.ts'
 import { DEFAULT_SETTINGS, machineOffset, mergeSettings, plateOffsetX } from '../shared/types.ts'
@@ -35,6 +36,8 @@ import { isGcodeFlavor, isKlipperFlavor } from '../shared/gcode-flavors.ts'
 import { analyzeGcode, convertGcode } from '../shared/gcode-import.ts'
 import { describeSequentialPlan, planSequentialOrder } from '../shared/sequential.ts'
 import { filamentChangeGcode, normalizeMultiMaterial, planPurgeLine } from '../shared/multiMaterial.ts'
+import { planPurgeTowers, purgeTowerPatch, type PurgeTowerPlan } from '../shared/purgeTower.ts'
+import { assembleLayerwise, splitGcodeSections } from './multicolor.ts'
 import { runPostProcessing } from './postprocess.ts'
 import { FILAMENTS, NOZZLE_SIZES, PLATES, PRINTERS, customPrinterProfile, filamentById, plateById, printerById } from '../shared/catalog.ts'
 import { listPorts, type ConnectOptions } from './printer/manager.ts'
@@ -72,7 +75,7 @@ loadCustomPrinters()
 void loadManifold().catch((err) =>
   console.warn('[csg] manifold konnte nicht vorgeladen werden:', err instanceof Error ? err.message : err),
 )
-import { parseSTL, transformMesh, type Mesh } from './slicer/stl.ts'
+import { makeMesh, parseSTL, transformMesh, type Mesh } from './slicer/stl.ts'
 import { withGcodeMetadata, type GcodeFilamentMetadata, type LayerOverride } from './slicer/gcode.ts'
 import { analyzeMesh } from './analyze.ts'
 import { sliceMesh } from './slicer/index.ts'
@@ -2240,7 +2243,7 @@ app.post('/api/slice', async (req, res) => {
   // Mehrfarbdruck: Objekte mit unterschiedlichen Filamenten werden nacheinander
   // gedruckt (wie „sequenzielles Drucken“). Zwischen den Filamenten steht M600.
   const visibleOnPlate = plateObjects.filter((o) => o.placement.visible && !o.negative && !o.excluded)
-  const sequentialRequested = merged.sequentialPrint?.enabled === true
+  const sequentialSetting = merged.sequentialPrint?.enabled === true
   // Ein zusammengebautes Einzelobjekt kann aus mehreren Hüllen bestehen, die
   // sich überlappen (z.B. Orca-Zusammenbau). Ohne Vereinigung slict der
   // Drucker sie als getrennte Teile — genau das passierte beim vorderen Teil.
@@ -2265,6 +2268,25 @@ app.post('/api/slice', async (req, res) => {
       color: slotFor(slotId)?.color,
     }
   }
+  // Mehrfarbdruck: gruppiert nach Filament-Zuordnung, nicht nur nach
+  // Werkzeugnummer. Zwei Filamentprofile können denselben Slot nutzen (z. B.
+  // PLA und PETG an einem Extruder mit M600) — das ist trotzdem mehrfarbig.
+  const colorGroups = new Map<string, ModelObject[]>()
+  for (const object of visibleOnPlate) {
+    const key = `${object.placement.filamentId ?? activeFilamentId}|${object.placement.slotId ?? ''}`
+    const list = colorGroups.get(key)
+    if (list) list.push(object)
+    else colorGroups.set(key, [object])
+  }
+  const colorKeys = [...colorGroups.keys()]
+  /**
+   * Mehrfarbdruck wird immer schichtweise gedruckt. Nur so kann in jeder
+   * Schicht die Farbe gewechselt und in einen Turm gespült werden; beim
+   * Objekt-für-Objekt-Druck würde der Turm bei jedem Wechsel auf Z0 neu
+   * beginnen und der Kopf über fertige Teile fahren.
+   */
+  const layerwiseMultiColor = colorKeys.length > 1
+  const sequentialRequested = sequentialSetting && !layerwiseMultiColor
   const assigned = new Set(visibleOnPlate.map((o) => o.placement.filamentId ?? ''))
   const safeLabel = (name: string) => name.replace(/[\r\n;]/g, ' ').trim() || 'Objekt'
   const safeObject = (name: string) =>
@@ -2368,10 +2390,332 @@ app.post('/api/slice', async (req, res) => {
     result.gcode = processed.gcode
     return result
   }
-  if (
-    visibleOnPlate.length > 1 &&
-    (sequentialRequested || (assigned.size > 1 && [...assigned].some((id) => id !== '')))
-  ) {
+  // ---- Mehrfarbdruck: immer schichtweise ----
+  if (layerwiseMultiColor) {
+    const started = Date.now()
+    try {
+      const warnings: string[] = []
+      if (sequentialSetting) {
+        warnings.push(
+          'Mehrfarbdruck wird immer schichtweise gedruckt — der sequenzielle Modus ist dafür abgeschaltet.',
+        )
+      }
+      if (merged.adaptiveLayerHeight?.enabled) {
+        warnings.push(
+          'Mehrfarbdruck rechnet mit fester Schichthöhe; die adaptive Schichthöhe ist dafür ausgeschaltet.',
+        )
+      }
+      if (merged.adhesion !== 'none') {
+        warnings.push(
+          'Mehrfarbdruck: Saum/Brim wird ausgelassen — jede Farbe würde sonst ihren eigenen Rand um dieselben Objekte ziehen. Erste Schicht am Drucker prüfen.',
+        )
+      }
+      const baseSettings = applyPrinterLimits(
+        machine,
+        mergeSettings(merged, {
+          adaptiveLayerHeight: { ...merged.adaptiveLayerHeight, enabled: false },
+          adhesion: 'none',
+          sequentialPrint: { enabled: false, clearance: merged.sequentialPrint?.clearance ?? 5 },
+        }),
+      )
+      const multi = normalizeMultiMaterial(baseSettings.multiMaterial)
+      if (multi.change === 'm600') {
+        warnings.push(
+          'Farbwechsel je Schicht mit M600: Der Drucker pausiert bei jedem Wechsel. Für IFS/AMS/MMU das passende Makro oder T0…Tn wählen.',
+        )
+      }
+      const objectShift = placementShift ?? fallbackObjectShift
+      const objectBoxes = visibleOnPlate.map((object, index) => {
+        const box = transformMesh(placeMesh(object.mesh, object.placement), {
+          x: objectShift.x,
+          y: objectShift.y,
+          z: 0,
+        }).bbox
+        return {
+          id: object.id,
+          name: `${object.name} ${index + 1}`,
+          minX: box.min.x,
+          minY: box.min.y,
+          maxX: box.max.x,
+          maxY: box.max.y,
+          maxZ: box.max.z,
+        }
+      })
+      const footprint = objectBoxes.reduce(
+        (box, entry) => ({
+          min: { x: Math.min(box.min.x, entry.minX), y: Math.min(box.min.y, entry.minY) },
+          max: { x: Math.max(box.max.x, entry.maxX), y: Math.max(box.max.y, entry.maxY) },
+        }),
+        { min: { x: Infinity, y: Infinity }, max: { x: -Infinity, y: -Infinity } },
+      )
+      const groups = colorKeys.map((key, id) => {
+        const objects = colorGroups.get(key) ?? []
+        const parts = objects.map((object) => placeMesh(object.mesh, object.placement))
+        const total = parts.reduce((sum, part) => sum + part.positions.length, 0)
+        const positions = new Float32Array(total)
+        let offset = 0
+        for (const part of parts) {
+          positions.set(part.positions, offset)
+          offset += part.positions.length
+        }
+        const fid =
+          objects.map((object) => object.placement.filamentId).find((id): id is string => !!id) ?? activeFilamentId
+        const f = filaments?.[fid]
+        // 3MF-Objektwerte gelten je Objekt; innerhalb einer Farbe müssen sie
+        // gleich sein, sonst wäre der gemeinsame Durchlauf nicht eindeutig.
+        const objectDefaults = objects.map((object) => object.settings).find((value) => !!value) ?? {}
+        const settings = applyPrinterLimits(
+          machine,
+          mergeSettings(baseSettings, {
+            ...(f
+              ? {
+                  flow: f.flow ?? baseSettings.flow,
+                  fanSpeed: f.fanSpeed ?? baseSettings.fanSpeed,
+                  maxVolumetricFlow: f.maxVolumetricFlow ?? baseSettings.maxVolumetricFlow,
+                  temps: {
+                    nozzle: f.nozzle ?? baseSettings.temps.nozzle,
+                    firstLayerNozzle: f.nozzle ?? baseSettings.temps.firstLayerNozzle,
+                    bed: f.bed ?? baseSettings.temps.bed,
+                    firstLayerBed: f.bed ?? baseSettings.temps.firstLayerBed,
+                  },
+                }
+              : {}),
+            ...objectDefaults,
+          }),
+        )
+        const boxes = objectBoxes.filter((entry) => objects.some((object) => object.id === entry.id))
+        const center = {
+          x: boxes.reduce((sum, entry) => sum + (entry.minX + entry.maxX) / 2, 0) / Math.max(1, boxes.length),
+          y: boxes.reduce((sum, entry) => sum + (entry.minY + entry.maxY) / 2, 0) / Math.max(1, boxes.length),
+        }
+        return {
+          id,
+          tool: slotIndexFor(objects[0]?.placement.slotId),
+          objects,
+          mesh: makeMesh(positions, false),
+          settings,
+          center,
+          filament: filamentMeta(fid, objects[0]?.placement.slotId),
+        }
+      })
+      for (const group of groups) {
+        const first = JSON.stringify(group.objects[0]?.settings ?? {})
+        if (group.objects.some((object) => JSON.stringify(object.settings ?? {}) !== first)) {
+          warnings.push(
+            'Mehrfarbdruck: Objekte einer Farbe mit unterschiedlichen 3MF-Objektwerten werden mit den Werten des ersten Objekts gedruckt.',
+          )
+          break
+        }
+      }
+
+      // Schichtplanung einmal für alle Farben — sonst läge jede Farbe auf
+      // einem eigenen Raster und die Schichten würden auseinanderlaufen.
+      const bands = planSliceBands(source, baseSettings, machine, {
+        center: false,
+        offset: objectShift,
+      }).bands
+      if (!bands.length) {
+        res.status(400).json({ error: 'Keine Schichten berechnet — Modell und Einstellungen prüfen.' })
+        return
+      }
+
+      // Purge-Turm: je Farbe ein eigener Querschnitt neben den Objekten.
+      let towerPlan: PurgeTowerPlan | null = null
+      if (multi.tower.enabled && multi.purge.enabled && multi.purge.volume > 0) {
+        towerPlan = planPurgeTowers({
+          bed: { x: machine.bed.x, y: machine.bed.y },
+          objects: objectBoxes,
+          tools: groups.map((group) => group.id),
+          volume: multi.purge.volume,
+          layerHeight: baseSettings.layerHeight,
+          gap: multi.tower.gap,
+        })
+        if (!towerPlan.ok) {
+          res.status(400).json({ error: towerPlan.error })
+          return
+        }
+      } else {
+        warnings.push(
+          'Mehrfarbdruck ohne Purge-Turm: Die alte Farbe kann in das Bauteil ziehen. Turm und Spülen unter „Filamentwechsel & Spülen“ einschalten.',
+        )
+      }
+
+      // Jede Farbe als eigener Durchlauf, aber auf derselben Schichtliste und
+      // mit E0 am Schichtanfang — damit lassen sich die Blöcke einsetzen.
+      const sliced = groups.map((group, index) => {
+        const cuts = group.objects.flatMap((object) =>
+          plateObjects
+            .filter((o) => o.placement.visible && o.negative && !o.excluded && o.text?.targetId === object.id)
+            .map((o) => placeMesh(o.mesh, o.placement)),
+        )
+        return {
+          group,
+          result: sliceMesh(group.mesh, group.settings, machine, mesh, model.overrides, {
+            start: index === 0,
+            end: index === 0,
+            center: false,
+            offset: objectShift,
+            bands,
+            resetExtruderEachLayer: true,
+            subtract: cuts,
+            customGcode,
+            metadata: false,
+            paint: paintMarks(group.objects, objectShift),
+            footprint,
+          }),
+        }
+      })
+      for (const { result } of sliced) warnings.push(...result.warnings)
+
+      const assembled = assembleLayerwise({
+        groups: sliced.map(({ group, result }) => ({
+          id: group.id,
+          tool: group.tool,
+          sections: splitGcodeSections(result.gcode),
+          layers: result.layers,
+          center: group.center,
+          nozzle: group.settings.temps.nozzle,
+          bed: group.settings.temps.bed,
+          nozzleDiameter: group.settings.nozzle,
+          filamentDiameter: group.settings.filamentDiameter,
+        })),
+        bands,
+        onToolChange: (group, z, height) => {
+          const lines: string[] = ['; ---- Farbwechsel ----']
+          lines.push('G92 E0', `G1 E-${Math.max(0, multi.retract).toFixed(2)} F1800`)
+          lines.push(`G1 Z${(z + multi.zLift + 1).toFixed(2)} F600`)
+          const cell = towerPlan?.ok ? towerPlan.cells.find((entry) => entry.tool === group.tool) : undefined
+          const parkX = cell ? cell.x + cell.size / 2 : group.center.x
+          const parkY = cell ? cell.y + cell.size / 2 : group.center.y
+          lines.push(`G0 X${parkX.toFixed(2)} Y${parkY.toFixed(2)} F9000`)
+          lines.push(
+            ...filamentChangeGcode({
+              multi,
+              tool: group.tool,
+              nozzle: group.nozzle,
+              bed: group.bed,
+            }),
+          )
+          let filamentMm = 0
+          let seconds = 0
+          let volumeMm3 = 0
+          if (cell) {
+            const patch = purgeTowerPatch({
+              cell,
+              z,
+              height,
+              volume: multi.purge.volume,
+              speed: multi.purge.speed,
+              nozzle: group.nozzleDiameter,
+              filamentDiameter: group.filamentDiameter,
+              retract: multi.retract,
+              zLift: multi.zLift,
+            })
+            lines.push(...patch.lines)
+            filamentMm = patch.filamentMm
+            seconds = patch.seconds
+            volumeMm3 = patch.volumeMm3
+          }
+          lines.push(`G0 X${group.center.x.toFixed(2)} Y${group.center.y.toFixed(2)} F9000`)
+          return { lines, filamentMm, seconds, volumeMm3 }
+        },
+      })
+
+      let seconds = assembled.stats.towerSeconds
+      let filamentMm = assembled.stats.towerFilamentMm
+      let grams = (assembled.stats.towerFilamentMm * Math.PI * (1.75 / 2) ** 2 * 1.24) / 1000
+      let volume = assembled.stats.towerVolumeMm3 / 1000
+      let maxFlow = 0
+      const featureTotals = new Map<PreviewFeatureKind, { seconds: number; volumeMm3: number }>()
+      for (const { result } of sliced) {
+        seconds += result.stats.estimatedSeconds
+        filamentMm += result.stats.filamentMm
+        grams += result.stats.filamentGrams
+        volume += result.stats.volumeCm3
+        maxFlow = Math.max(maxFlow, result.stats.maxFlowMm3s)
+        for (const feature of result.features) {
+          const entry = featureTotals.get(feature.kind) ?? { seconds: 0, volumeMm3: 0 }
+          entry.seconds += feature.seconds
+          entry.volumeMm3 += (feature.grams / 1.24) * 1000
+          featureTotals.set(feature.kind, entry)
+        }
+      }
+
+      // Objektmarker: ZMOD-Drucker brauchen die Definitionen vor START_PRINT
+      // (A-176). Start/Ende je Objekt geht im schichtweisen Druck nicht, weil
+      // sich die Objekte jeder Schicht abwechseln — die Definitionen bleiben.
+      const definitions: string[] = []
+      if (merged.output?.excludeObjects === true || machine.zmodMesh === true) {
+        if (isKlipperFlavor(machine.flavor)) {
+          const pad = 0.5
+          objectBoxes.forEach((box, index) => {
+            const x0 = (box.minX - pad).toFixed(2)
+            const y0 = (box.minY - pad).toFixed(2)
+            const x1 = (box.maxX + pad).toFixed(2)
+            const y1 = (box.maxY + pad).toFixed(2)
+            definitions.push(
+              `EXCLUDE_OBJECT_DEFINE NAME=${safeObject(box.name)}_${index + 1} POLYGON=[[${x0},${y0}],[${x1},${y0}],[${x1},${y1}],[${x0},${y1}]]`,
+            )
+          })
+        } else {
+          definitions.push(`M486 T${objectBoxes.length} ; Objektanzahl`)
+        }
+      }
+
+      const marker = '; ---- Mehrfarbdruck je Schicht ----'
+      const raw = [marker, ...definitions, assembled.gcode].join('\n')
+      const usedFilaments: GcodeFilamentMetadata[] = []
+      const usedKeys = new Set<string>()
+      for (const group of groups) {
+        const key = `${group.filament.name}|${group.filament.color ?? ''}`
+        if (usedKeys.has(key)) continue
+        usedKeys.add(key)
+        usedFilaments.push(group.filament)
+      }
+      const combined = withGcodeMetadata(raw, {
+        profile: machine,
+        settings: baseSettings,
+        filaments: usedFilaments,
+        seconds,
+        filamentMm,
+        filamentGrams: grams,
+        layerCount: assembled.layers.length,
+        maxZ: assembled.layers.reduce((max, layer) => Math.max(max, layer.z), 0),
+        toolChanges: assembled.stats.toolChanges,
+      })
+      // Zeilenkarte: Metadatenblock + Markierung + Objektdefinitionen stehen vor
+      // dem zusammengesetzten G-Code; jede Vorschauzeile wandert um diese Zahl.
+      shiftPreviewLines(
+        assembled.layers,
+        gcodeLineOffsetBefore(combined, marker) + definitions.length + 1,
+      )
+      const stats = {
+        estimatedSeconds: seconds,
+        filamentMm: Math.round(filamentMm),
+        filamentGrams: Math.round(grams * 10) / 10,
+        layerCount: assembled.layers.length,
+        volumeCm3: Math.round(volume * 10) / 10,
+        maxFlowMm3s: Math.round(maxFlow * 10) / 10,
+      }
+      const finalized = await finalize({
+        gcode: combined,
+        layers: assembled.layers,
+        features: featureRows(featureTotals),
+        stats,
+        warnings: [...new Set(warnings)],
+      })
+      res.json({ ...finalized, sliceMs: Date.now() - started, preview: finalized.layers })
+      return
+    } catch (err) {
+      console.error('Slice-Fehler (Mehrfarbdruck je Schicht):', err)
+      res.status(500).json({
+        error: err instanceof Error ? err.message : 'Mehrfarbdruck je Schicht fehlgeschlagen.',
+      })
+      return
+    }
+  }
+
+  if (visibleOnPlate.length > 1 && sequentialRequested) {
     const started = Date.now()
     try {
       const { dx, dy } = machineOffset(machine)

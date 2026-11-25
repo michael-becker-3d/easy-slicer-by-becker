@@ -2465,12 +2465,40 @@ export function SettingsSidebar({
                     {...common}
                   />
                   <p className="col-span-full text-[9px] leading-snug text-white/25">
-                    Spüllänge 0 rechnet die Länge aus dem Volumen. Der Purge-Turm entsteht mit dem
-                    Schichtwechsel je Farbe (Objektmarker sind dafür die Grundlage) und lässt sich danach
-                    zusätzlich einschalten.
+                    Spüllänge 0 rechnet die Länge aus dem Volumen. Bei mehreren Filamenten druckt der
+                    Slicer immer schichtweise; das Spülvolumen geht dann in den Purge-Turm.
                   </p>
+                  <Bool
+                    label="Purge-Turm"
+                    value={settings.multiMaterial.tower.enabled}
+                    path={['multiMaterial', 'tower', 'enabled']}
+                    hint="Je Farbe ein Turm neben den Objekten. Ohne Turm zieht die alte Farbe ins Bauteil."
+                    {...common}
+                  />
+                  {settings.multiMaterial.tower.enabled && (
+                    <Num
+                      label="Turm-Abstand"
+                      unit="mm"
+                      step={1}
+                      min={0}
+                      max={20}
+                      value={settings.multiMaterial.tower.gap}
+                      path={['multiMaterial', 'tower', 'gap']}
+                      {...common}
+                    />
+                  )}
                 </>
               )}
+              <Num
+                label="Z-Hub nach Spülen"
+                unit="mm"
+                step={0.1}
+                min={0}
+                max={3}
+                value={settings.multiMaterial.zLift}
+                path={['multiMaterial', 'zLift']}
+                {...common}
+              />
             </Fold>
           </Section>
         )}
@@ -2503,7 +2531,7 @@ export function SettingsSidebar({
                 label="Objekte nacheinander drucken"
                 value={settings.sequentialPrint.enabled}
                 path={['sequentialPrint', 'enabled']}
-                hint="Jedes Objekt wird vollständig gedruckt, bevor das nächste beginnt. Der Slicer sortiert nach Höhe und prüft den horizontalen Abstand."
+                hint="Jedes Objekt wird vollständig gedruckt, bevor das nächste beginnt. Nur für einfarbige Drucke — bei mehreren Filamenten druckt der Slicer immer schichtweise."
                 {...common}
               />
               {settings.sequentialPrint.enabled && (
@@ -2522,7 +2550,9 @@ export function SettingsSidebar({
                 <p className="col-span-full rounded-xl border border-amber/25 bg-amber/[0.04] px-2.5 py-2 text-[10px] leading-snug text-white/45">
                   Der Abstand gilt zwischen den Objekt-Bounding-Boxen, inklusive Saum/Brim. Druckkopf,
                   Portal und Kabelwege müssen trotzdem am Drucker geprüft werden — der Slicer kennt
-                  die Kopfform nicht. Bei mehreren Filamenten bleibt der M600-Wechsel aktiv.
+                  die Kopfform nicht. Sobald zwei Filament-Slots im Druck vorkommen, ist dieser Modus
+                  gesperrt: Der Slicer druckt dann immer schichtweise mit Farbwechsel und Purge-Turm je
+                  Schicht.
                 </p>
               )}
             </Fold>
