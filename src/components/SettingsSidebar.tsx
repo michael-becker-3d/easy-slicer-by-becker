@@ -1468,7 +1468,10 @@ export function SettingsSidebar({
           filamentOpen ? 'hidden' : 'sticky'
         }`}
       >
-        <div className="flex gap-1 overflow-x-auto pb-0.5">
+        {/* In der schmalen Spalte passen sieben Reiter nie in eine Zeile. Statt
+            horizontal zu scrollen (der aktive Reiter lag dabei außerhalb) wird
+            umgebrochen — so ist jeder Reiter sichtbar und klickbar. */}
+        <div className="flex flex-wrap gap-1">
           {TABS.map((item) => (
             <button
               key={item.id}
@@ -2419,7 +2422,7 @@ export function SettingsSidebar({
                 label="Nach dem Wechsel spülen"
                 value={settings.multiMaterial.purge.enabled}
                 path={['multiMaterial', 'purge', 'enabled']}
-                hint="Zieht eine Spüllinie am Bettrand, bevor das neue Objekt beginnt."
+                hint="Spült nach jedem Wechsel. Bei mehreren Farben geht das Material in den Purge-Turm."
                 {...common}
               />
               {settings.multiMaterial.purge.enabled && (
