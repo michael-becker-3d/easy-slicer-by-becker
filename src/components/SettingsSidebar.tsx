@@ -22,6 +22,8 @@ import type {
   TopTexturePatternChoice,
   TextureZone,
   WallOrder,
+  FilamentChangeMode,
+  PurgeSide,
 } from '../../shared/types.ts'
 import type { QualityPreset } from '../../shared/catalog.ts'
 import { InfoDot, Segmented, Stepper, Toggle } from './ui.tsx'
@@ -800,8 +802,9 @@ function MultiMaterial({
       </div>
 
       <p className="text-[9px] leading-snug text-white/25">
-        Der Slicer druckt Objekte mit unterschiedlichen Slots aktuell nacheinander und setzt dazwischen M600. Für
-        echtes Mehrfarben pro Schicht fehlt noch die Toolwechsel-Erzeugung.
+        Der Slicer druckt Objekte mit unterschiedlichen Slots nacheinander und setzt dazwischen den Wechselbefehl
+        (unten: M600, Werkzeugnummer oder Makro), danach die Spüllinie. Echtes Mehrfarben pro Schicht braucht noch
+        die Toolwechsel-Erzeugung innerhalb einer Schicht.
       </p>
     </div>
   )
@@ -2359,6 +2362,116 @@ export function SettingsSidebar({
               onSlotsChange={onSlotsChange}
               onAssignSlot={onAssignSlot}
             />
+
+            <Fold
+              title="Filamentwechsel & Spülen"
+              hint={
+                settings.multiMaterial.purge.enabled
+                  ? `${settings.multiMaterial.purge.volume} mm³ je Wechsel`
+                  : 'Spülen aus'
+              }
+            >
+              <Choice
+                label="Wechselbefehl"
+                value={settings.multiMaterial.change}
+                path={['multiMaterial', 'change']}
+                options={[
+                  { value: 'm600' as FilamentChangeMode, label: 'M600 (Filamentwechsel)' },
+                  { value: 'tool' as FilamentChangeMode, label: 'Werkzeugnummer T0…Tn' },
+                  { value: 'custom' as FilamentChangeMode, label: 'Eigenes Makro' },
+                ]}
+                {...common}
+              />
+              {settings.multiMaterial.change === 'custom' && (
+                <label className="col-span-full">
+                  <span className="mb-1 flex items-center gap-1 text-[10px] font-medium tracking-wider text-white/40 uppercase">
+                    <span className="flex-1">Makro</span>
+                    <InfoDot label="Wechsel-Makro" />
+                  </span>
+                  <input
+                    type="text"
+                    spellCheck={false}
+                    value={settings.multiMaterial.changeGcode}
+                    onChange={(event) =>
+                      onChange(
+                        setPath(settings, ['multiMaterial', 'changeGcode'], event.target.value),
+                      )
+                    }
+                    placeholder="z. B. LOAD_FILAMENT SLOT={tool}"
+                    className="w-full rounded-lg border border-line/80 bg-ink-900/70 px-2 py-1.5 text-[10px] text-white/80 outline-none focus:border-sky/50"
+                  />
+                  <span className="mt-1 block text-[8px] leading-snug text-white/25">
+                    Platzhalter: {'{tool}'} = Werkzeugnummer, {'{nozzle}'} und {'{bed}'} = Temperaturen.
+                  </span>
+                </label>
+              )}
+              <Num
+                label="Rückzug vor Wechsel"
+                unit="mm"
+                step={0.5}
+                min={0}
+                max={20}
+                value={settings.multiMaterial.retract}
+                path={['multiMaterial', 'retract']}
+                {...common}
+              />
+              <Bool
+                label="Nach dem Wechsel spülen"
+                value={settings.multiMaterial.purge.enabled}
+                path={['multiMaterial', 'purge', 'enabled']}
+                hint="Zieht eine Spüllinie am Bettrand, bevor das neue Objekt beginnt."
+                {...common}
+              />
+              {settings.multiMaterial.purge.enabled && (
+                <>
+                  <Num
+                    label="Spülvolumen"
+                    unit="mm³"
+                    step={5}
+                    min={0}
+                    max={400}
+                    value={settings.multiMaterial.purge.volume}
+                    path={['multiMaterial', 'purge', 'volume']}
+                    {...common}
+                  />
+                  <Num
+                    label="Spüllänge"
+                    unit="mm"
+                    step={10}
+                    min={0}
+                    max={300}
+                    value={settings.multiMaterial.purge.length}
+                    path={['multiMaterial', 'purge', 'length']}
+                    {...common}
+                  />
+                  <Num
+                    label="Spültempo"
+                    unit="mm/s"
+                    step={5}
+                    min={5}
+                    max={100}
+                    value={settings.multiMaterial.purge.speed}
+                    path={['multiMaterial', 'purge', 'speed']}
+                    {...common}
+                  />
+                  <Choice
+                    label="Spülseite"
+                    value={settings.multiMaterial.purge.side}
+                    path={['multiMaterial', 'purge', 'side']}
+                    options={[
+                      { value: 'back' as PurgeSide, label: 'Hinten' },
+                      { value: 'front' as PurgeSide, label: 'Vorne' },
+                    ]}
+                    {...common}
+                  />
+                  <p className="col-span-full text-[9px] leading-snug text-white/25">
+                    Spüllänge 0 rechnet die Länge aus dem Volumen. Der Purge-Turm entsteht mit dem
+                    Schichtwechsel je Farbe (Objektmarker sind dafür die Grundlage) und lässt sich danach
+                    zusätzlich einschalten.
+                  </p>
+                </>
+              )}
+            </Fold>
           </Section>
         )}
 

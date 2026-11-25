@@ -4,8 +4,10 @@ import type {
   TextureZone,
   TopTexturePatternChoice,
 } from './surfaceTexture.ts'
+import { DEFAULT_MULTI_MATERIAL, normalizeMultiMaterial, type MultiMaterialSettings } from './multiMaterial.ts'
 
 export type { SurfaceTexturePattern, TexturePatternChoice, TextureZone, TopTexturePatternChoice }
+export type { MultiMaterialSettings, FilamentChangeMode, PurgeSide } from './multiMaterial.ts'
 
 export type Vec3 = { x: number; y: number; z: number }
 
@@ -621,6 +623,8 @@ export type PrintSettings = {
    * wird vor dem Slicen geprüft.
    */
   sequentialPrint: SequentialPrintSettings
+  /** Mehrfarbdruck: Wechselbefehl und Spüllinie je Filamentwechsel. */
+  multiMaterial: MultiMaterialSettings
   fanSpeed: number
   adhesion: Adhesion
   skirt: SkirtSettings
@@ -1113,6 +1117,7 @@ export const DEFAULT_SETTINGS: PrintSettings = {
   },
   printOrder: { walls: 'inner-first', layer: 'walls-first', paths: 'shortest', continuous: true },
   sequentialPrint: { enabled: false, clearance: 5 },
+  multiMaterial: DEFAULT_MULTI_MATERIAL,
   fanSpeed: 100,
   adhesion: 'skirt',
   skirt: {
@@ -1168,7 +1173,7 @@ export const DEFAULT_SETTINGS: PrintSettings = {
     verbosePaths: false,
     reduceInfillRetraction: false,
     lineNumbers: false,
-    excludeObjects: false,
+    excludeObjects: true,
     filenameFormat: '{input_filename_base}_{filament_type[0]}_{print_time}.gcode',
   },
   ironing: { enabled: false, flow: 0.12, speed: 25, spacing: 0.12, inset: 0, angle: 45, type: 'top', pattern: 'lines' },
@@ -1229,12 +1234,13 @@ export function mergeSettings(base: PrintSettings, patch: DeepPartial<PrintSetti
   out.pressureAdvanceRamp = { enabled: false, from: 0, to: 0.1, startX: 0, endX: 200, ...(out.pressureAdvanceRamp ?? {}) }
   out.arcFitting = { enabled: false, tolerance: 0.05, minSegments: 4, ...(out.arcFitting ?? {}) }
   out.primeLine = { enabled: true, length: 60, speed: 20, ...(out.primeLine ?? {}) }
+  out.multiMaterial = normalizeMultiMaterial(out.multiMaterial)
   out.output = {
     objectLabels: true,
     verbosePaths: false,
     reduceInfillRetraction: false,
     lineNumbers: false,
-    excludeObjects: false,
+    excludeObjects: true,
     filenameFormat: '{input_filename_base}_{filament_type[0]}_{print_time}.gcode',
     ...(out.output ?? {}),
   }

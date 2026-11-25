@@ -246,6 +246,22 @@ export const SETTING_INFO: Record<string, string> = {
     'Verbindet kurze Wege zwischen Innenwänden und Füllbahnen ohne Rückzug und ohne Z-Hop. Das spart Rückzüge, Z-Bewegungen und Zeit; Außenwände, Deckschichten und Stützen behalten ihren normalen Rückzug.',
   Vasenmodus:
     'Druckt nur eine einzige Außenwand ohne Füllung und ohne Deck-/Bodenschichten — ideal für Vasen und Zylinder. Beim Slicen werden Wandzahl, Füllungsdichte und Deckschichten automatisch überschrieben (1 Wand, 0 % Füllung, 0 Deckschichten, keine Stützen). Die Düse steigt spiralförmig über die Wand an — keine Naht, kein Anheben pro Schicht. Das Teil wird nur von der Wandstärke getragen und ist oben offen.',
+  Wechselbefehl:
+    'Legt fest, wie der Slicer die Farbe wechselt. „M600“ pausiert und wartet auf den Filamentwechsel am Drucker — das ist der übliche Weg bei Einzel-Extruder mit Mehrfachzuführung (IFS, AMS, ACE, CFS, MMU). „Werkzeugnummer“ schreibt T0…Tn und ist nur für Drucker mit echten Wechselköpfen oder mehreren Extrudern richtig; ein Einzel-Extruder kennt T-Befehle nicht. „Eigenes Makro“ nimmt einen beliebigen Befehl, zum Beispiel ein Lade-Makro der Firmware.',
+  'Wechsel-Makro':
+    'Der G-Code, der beim Farbwechsel ausgeführt wird. Platzhalter: {tool} wird zur Werkzeugnummer des neuen Filaments, {nozzle} und {bed} zu den Temperaturen des Ziels. Beispiel: LOAD_FILAMENT SLOT={tool}. Der Befehl läuft nach dem Rückzug und vor dem Abwarten der Temperatur.',
+  'Rückzug vor Wechsel|mm':
+    'Zieht das Filament vor dem Wechsel zurück, damit beim Parken und Spülen kein Material nachläuft. 1–3 mm reichen bei Direct Drive; bei Bowden mehr. Zu viel Rückzug kann Luft in die Düse ziehen, dann fehlt beim Anfahren Material.',
+  'Nach dem Wechsel spülen':
+    'Fährt nach jedem Farbwechsel eine Spüllinie am Bettrand, bevor das nächste Objekt beginnt. Ohne Spülen bleibt alte Farbe in der Düse und zieht in die ersten Millimeter des neuen Teils. Die Linie wird nur gelegt, wenn dort kein Objekt steht.',
+  'Spülvolumen|mm³':
+    'Materialmenge, die je Wechsel verworfen wird. 40–80 mm³ reichen bei direktem Übergang von einer Farbe zur nächsten meist aus; bei großem Farbunterschied (schwarz nach weiß) lieber 100–150 mm³. Mehr kostet Material und Zeit, spart aber Fehldrucke.',
+  'Spüllänge|mm':
+    'Länge der Spüllinie. 0 rechnet sie aus dem Spülvolumen und der Schichthöhe. Eine feste Länge ist sinnvoll, wenn am Bettrand nur ein schmaler Streifen frei ist; ist sie zu kurz, wird die Linie sehr dick.',
+  'Spültempo|mm/s':
+    'Tempo der Spüllinie. Langsam (15–25 mm/s) spült sauber und lässt die Düse nicht spritzen; schnell spart nur Sekunden und erzeugt eher Fäden.',
+  Spülseite:
+    'Rand, an dem gespült wird — hinten oder vorne. Die Objekte sollten auf der gegenüberliegenden Seite stehen; überlappt die Linie ein Objekt, wird sie nicht geschrieben und der Slicer warnt.',
   'Objekt-Slot':
     'Ordnet ein einzelnes Objekt einem Filament-Slot zu. Der Slicer druckt Objekte mit verschiedenen Slots nacheinander und setzt dazwischen einen Filamentwechsel; echtes Mehrfarben pro Schicht ist noch nicht enthalten.',
   'Schichthöhe erste Schicht|mm':

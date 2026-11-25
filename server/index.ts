@@ -34,6 +34,7 @@ import { adaptImportedObjectSettings, applyPrinterLimits, effectivePrinterLimits
 import { isGcodeFlavor, isKlipperFlavor } from '../shared/gcode-flavors.ts'
 import { analyzeGcode, convertGcode } from '../shared/gcode-import.ts'
 import { describeSequentialPlan, planSequentialOrder } from '../shared/sequential.ts'
+import { filamentChangeGcode, normalizeMultiMaterial, planPurgeLine } from '../shared/multiMaterial.ts'
 import { runPostProcessing } from './postprocess.ts'
 import { FILAMENTS, NOZZLE_SIZES, PLATES, PRINTERS, customPrinterProfile, filamentById, plateById, printerById } from '../shared/catalog.ts'
 import { listPorts, type ConnectOptions } from './printer/manager.ts'
@@ -2248,6 +2249,11 @@ app.post('/api/slice', async (req, res) => {
   const activeFilamentId = filamentId ?? 'pla'
   const slotFor = (slotId?: string) =>
     slots?.find((s) => s.id === slotId) ?? (slotId ? undefined : slots?.find((s) => s.id === activeSlotId)) ?? slots?.[0]
+  /** Werkzeugnummer für T0…Tn: Position des Slots in der Zuführung. */
+  const slotIndexFor = (slotId?: string) => {
+    const index = slots?.findIndex((entry) => entry.id === slotId)
+    return typeof index === 'number' && index >= 0 ? index : 0
+  }
   const filamentMeta = (profileId?: string, slotId?: string): GcodeFilamentMetadata => {
     const id = profileId ?? activeFilamentId
     const values = filaments?.[id]
@@ -2383,6 +2389,11 @@ app.post('/api/slice', async (req, res) => {
       let previousFilamentKey: string | undefined
       let toolChanges = 0
       let previousObjectMaxZ = 0
+      // Spüllinien je Wechsel: eigenes Material und eigene Zeit, sonst würde
+      // die Statistik den Verbrauch zu niedrig anzeigen.
+      let purgeMillimeters = 0
+      let purgeSeconds = 0
+      let purgeVolumeMm3 = 0
 
       // Die Reihenfolge wird vor dem ersten Slice festgelegt. Bei sequenziellem
       // Druck kommt das niedrigste Objekt zuerst; dadurch kann der Kopf später
@@ -2476,8 +2487,39 @@ app.post('/api/slice', async (req, res) => {
             for (const l of String(customGcode?.pause ?? '').split('\n')) {
               if (l.trim()) parts.push(l.replaceAll('{nozzle}', String(objectSettings.temps.nozzle)).replaceAll('{bed}', String(objectSettings.temps.bed)))
             }
-            parts.push('M600 ; Filamentwechsel — Farbe/Material tauschen')
-            parts.push(`M140 S${objectSettings.temps.bed}`, `M104 S${objectSettings.temps.nozzle}`, `M109 S${objectSettings.temps.nozzle}`)
+            // Wechselbefehl aus den Einstellungen: M600, T0…Tn oder ein eigenes
+            // Makro. Danach wird gespült, sonst zieht die alte Farbe ins neue Teil.
+            const multi = normalizeMultiMaterial(objectSettings.multiMaterial)
+            for (const line of filamentChangeGcode({
+              multi,
+              tool: slotIndexFor(object.placement.slotId),
+              nozzle: objectSettings.temps.nozzle,
+              bed: objectSettings.temps.bed,
+            })) {
+              parts.push(line)
+            }
+            const purge = planPurgeLine({
+              bed: { x: machine.bed.x, y: machine.bed.y },
+              objects: layoutBoxes.map((box) => ({
+                minX: box.minX,
+                minY: box.minY,
+                maxX: box.maxX,
+                maxY: box.maxY,
+              })),
+              multi,
+              index: Math.max(0, toolChanges - 1),
+              nozzle: objectSettings.nozzle,
+              filamentDiameter: objectSettings.filamentDiameter,
+              z: Math.max(0.2, objectSettings.firstLayerHeight),
+              layerHeight: Math.max(0.05, objectSettings.firstLayerHeight),
+            })
+            if (purge.lines.length) {
+              parts.push(...purge.lines)
+              purgeMillimeters += purge.filamentMm
+              purgeSeconds += purge.seconds
+              purgeVolumeMm3 += purge.volumeMm3
+            }
+            if (purge.skipped) warnings.push(`Spülen nach dem Wechsel: ${purge.skipped}`)
           }
           const cx = ((box.min.x + box.max.x) / 2 + dx).toFixed(2)
           const cy = ((box.min.y + box.max.y) / 2 + dy).toFixed(2)
@@ -2519,6 +2561,13 @@ app.post('/api/slice', async (req, res) => {
         }
         previousObjectMaxZ = Math.max(previousObjectMaxZ, box.max.z)
         previousFilamentKey = filamentKey
+      }
+
+      if (purgeMillimeters > 0) {
+        seconds += purgeSeconds
+        filamentMm += purgeMillimeters
+        grams += (purgeMillimeters * Math.PI * (1.75 / 2) ** 2 * 1.24) / 1000
+        volume += purgeVolumeMm3 / 1000
       }
 
       if (orderPlan) {
