@@ -1,5 +1,37 @@
 import type { BedMesh, KlipperMeshProfiles } from '../../shared/types.ts'
 
+/**
+ * Werkzeugnummern, die eine Datei wirklich wechselt. Gelesen werden nur
+ * Befehlszeilen: `T0`…`Tn` am Zeilenanfang und `_A_CHANGE_FILAMENT CHANNEL=n`.
+ * `M104 S215 T0` ist ein Parameter, kein Werkzeugwechsel.
+ */
+export function toolsUsedInGcode(gcode: string): number[] {
+  const found = new Set<number>()
+  for (const raw of gcode.split('\n')) {
+    const line = raw.split(';')[0].trim()
+    if (!line) continue
+    const tool = /^T(\d+)(?:\s|$)/i.exec(line)
+    if (tool) found.add(Number(tool[1]))
+    const change = /^_A_CHANGE_FILAMENT\b.*\bCHANNEL\s*=\s*(\d+)/i.exec(line)
+    if (change) found.add(Number(change[1]))
+  }
+  return [...found].filter((n) => Number.isFinite(n)).sort((a, b) => a - b)
+}
+
+/**
+ * Startbefehl für eine Datei mit Werkzeugwechseln auf dem AD5X (IFS).
+ * Werkzeug n entspricht Slot n+1, weil der Slicer den Slot-Index als
+ * Werkzeugnummer ausgibt. `null`, wenn die Datei nichts wechselt.
+ */
+export function colorStartCommand(name: string, tools: number[]): string | null {
+  const unique = [...new Set(tools)]
+    .filter((tool) => Number.isInteger(tool) && tool >= 0)
+    .sort((a, b) => a - b)
+  if (unique.length === 0) return null
+  const map = unique.map((tool) => `T${tool}=${tool + 1}`).join(' ')
+  return `PRINT_ZCOLOR FILENAME="${name}" PLATE=1 ALLOWED_TOOL_COUNT=${unique.length} ${map}`
+}
+
 /** Moonraker-REST-Client (Klipper). */
 export class KlipperClient {
   readonly baseUrl: string
@@ -229,6 +261,41 @@ export class KlipperClient {
     // dauern; ein 12-s-Abbruch würde einen bereits gestarteten Druck melden.
     await this.gcode(`SDCARD_PRINT_FILE FILENAME=${name}`, 120000)
 
+    await this.waitForMacroPrint(name, opts)
+  }
+
+  /**
+   * AD5X mit IFS: `_CHANGE_FILAMENT` holt seinen Slot aus der Zuordnung in
+   * mod_data/file.json, und nur PRINT_ZCOLOR schreibt sie. Eine Datei mit
+   * Werkzeugwechseln muss deshalb darüber starten — sonst bricht der erste
+   * Wechsel mit „CHANNEL … out of range" ab. Ohne Wechsel bleibt der bisherige
+   * Weg über SDCARD_PRINT_FILE.
+   */
+  async startFileViaColorMacro(name: string, tools: number[]): Promise<void> {
+    if (!/^[A-Za-z0-9._-]+$/.test(name)) {
+      throw new Error(`Ungültiger Dateiname für PRINT_ZCOLOR: ${name}`)
+    }
+    const command = colorStartCommand(name, tools)
+    if (!command) {
+      await this.startFileViaMacro(name)
+      return
+    }
+    // Wie beim SDCARD_PRINT_FILE-Makro: Datei prüfen, IFS richten, dann
+    // starten. Das kann länger dauern als ein normales Kommando.
+    await this.gcode(command, 120000)
+    await this.waitForMacroPrint(name)
+  }
+
+  /**
+   * Warten, bis Klipper den erwarteten Dateinamen als laufend meldet. Der
+   * Aufruf des Makros allein beweist keinen Druck: es arbeitet asynchron und
+   * kann die Datei ablehnen. Es wird bewusst nicht automatisch erneut
+   * gestartet — ein doppelter Aufruf könnte zwei Jobs auslösen.
+   */
+  private async waitForMacroPrint(
+    name: string,
+    opts: { timeoutMs?: number; pollMs?: number } = {},
+  ): Promise<void> {
     const timeoutMs = Math.max(1000, opts.timeoutMs ?? 45000)
     const pollMs = Math.max(100, opts.pollMs ?? 750)
     const deadline = Date.now() + timeoutMs

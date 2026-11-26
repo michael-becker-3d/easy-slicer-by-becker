@@ -5,7 +5,7 @@ import { loadMesh, saveMesh } from '../meshStore.ts'
 import type { Area } from '../footprint.ts'
 import { printerById } from '../../shared/catalog.ts'
 import { MockTransport, SerialTransport, type Transport } from './transport.ts'
-import { KlipperClient } from './klipper.ts'
+import { KlipperClient, toolsUsedInGcode } from './klipper.ts'
 import { OctoPrintClient } from './octoprint.ts'
 import { GcodeStreamer } from './streamer.ts'
 import { meshFromPoints, parseMeshTable, parseProbeLines, type ProbePoint } from './mesh.ts'
@@ -940,7 +940,13 @@ export class PrinterManager extends EventEmitter {
       // kann Moonraker den Upload annehmen, ohne den neuen Druck zu starten.
       await this.klipper!.upload(name, gcode, false)
       if (viaAd5xMacro) {
-        await this.klipper!.startFileViaMacro(name)
+        // Der Farbwechsel holt seinen Slot aus mod_data/file.json; nur
+        // PRINT_ZCOLOR schreibt diese Zuordnung. Eine Datei mit
+        // Werkzeugwechseln startet deshalb darüber, sonst bricht der erste
+        // Wechsel mit „CHANNEL … out of range" ab.
+        const tools = toolsUsedInGcode(gcode)
+        if (tools.length > 0) await this.klipper!.startFileViaColorMacro(name, tools)
+        else await this.klipper!.startFileViaMacro(name)
       } else {
         await this.klipper!.startPrint(name)
         await this.klipper!.waitForPrintStart(name)

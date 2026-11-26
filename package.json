@@ -26,6 +26,7 @@
     "test:vase-mesh": "tsx scripts/check-vase-mesh-z.ts",
     "test:textures": "tsx scripts/check-surface-textures.ts",
     "test:multi-material": "tsx scripts/check-multi-material.ts",
+    "test:ad5x-start": "tsx scripts/check-ad5x-start.ts",
     "test:shapes": "tsx scripts/check-shape-library.ts",
     "test:elephant-foot": "tsx scripts/check-elephant-foot.ts",
     "test:audit": "tsx scripts/check-audit.ts",
