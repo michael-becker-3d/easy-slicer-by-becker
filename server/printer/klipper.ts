@@ -32,6 +32,15 @@ export function colorStartCommand(name: string, tools: number[]): string | null 
   return `PRINT_ZCOLOR FILENAME="${name}" PLATE=1 ALLOWED_TOOL_COUNT=${unique.length} ${map}`
 }
 
+/** Ergebnis der Firmware-Erkennung über Moonraker. */
+export type KlipperFirmwareReport = {
+  kind: 'zmod' | 'original'
+  /** Was die Erkennung belegt hat — für die Anzeige, nicht für die Entscheidung. */
+  evidence: string[]
+  /** Vom Drucker gemeldete Z-Mod-Funktionen, z. B. print_start_tools. */
+  features: string[]
+}
+
 /** Moonraker-REST-Client (Klipper). */
 export class KlipperClient {
   readonly baseUrl: string
@@ -119,6 +128,59 @@ export class KlipperClient {
     } catch {
       return null
     }
+  }
+
+  /**
+   * Firmware-Art über Moonraker erkennen. Z-Mod bringt eigene Klipper-Objekte
+   * (`zmod_color`), das Makro `SDCARD_PRINT_FILE` und einen `zmod`-Block in
+   * `/server/info` mit; ohne Z-Mod fehlen alle drei.
+   *
+   * `null` heißt „nichts hat geantwortet" — dann entscheidet der Aufrufer
+   * (manuelle Wahl oder Profil). Eine Antwort ohne Z-Mod-Merkmale ist dagegen
+   * eine echte Erkennung: Original-Firmware.
+   */
+  async detectFirmware(timeoutMs = 4000): Promise<KlipperFirmwareReport | null> {
+    const evidence: string[] = []
+    const features = new Set<string>()
+    let answered = false
+
+    try {
+      const data = await this.req('/printer/objects/list', undefined, timeoutMs)
+      answered = true
+      const objects: unknown[] = Array.isArray(data?.result?.objects) ? data.result.objects : []
+      const zmod = objects.filter((name): name is string => typeof name === 'string' && /^zmod/i.test(name))
+      if (zmod.length) evidence.push(`Klipper-Objekt ${zmod.join(', ')}`)
+    } catch {
+      // Ältere Moonraker-Stände kennen den Endpunkt nicht — die anderen zählen.
+    }
+
+    try {
+      const data = await this.req('/printer/gcode/help', undefined, timeoutMs)
+      answered = true
+      const commands = data?.result && typeof data.result === 'object' ? Object.keys(data.result) : []
+      const found = ['PRINT_ZCOLOR', 'SDCARD_PRINT_FILE'].filter((name) =>
+        commands.some((command) => command.toUpperCase() === name),
+      )
+      if (found.length) evidence.push(`Makro ${found.join(', ')}`)
+    } catch {
+      // s. o.
+    }
+
+    try {
+      const data = await this.req('/server/info', undefined, timeoutMs)
+      answered = true
+      const zmod = data?.result?.zmod
+      if (zmod && typeof zmod === 'object') {
+        evidence.push('zmod-Block in der Moonraker-Info')
+        const raw = Array.isArray(zmod.features) ? zmod.features : Object.keys(zmod.features ?? {})
+        for (const name of raw) if (typeof name === 'string') features.add(name)
+      }
+    } catch {
+      // s. o.
+    }
+
+    if (!answered) return null
+    return { kind: evidence.length ? 'zmod' : 'original', evidence, features: [...features] }
   }
 
   async mesh(): Promise<BedMesh | null> {

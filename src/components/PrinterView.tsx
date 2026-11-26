@@ -471,7 +471,14 @@ export function PrinterView({
                 disabled={busy !== null}
                 onClick={() =>
                   run('conn', async () => {
-                    await api.connectPrinter({ mode, path: port, baud, profileId: profile.id, url })
+                    await api.connectPrinter({
+                      mode,
+                      path: port,
+                      baud,
+                      profileId: profile.id,
+                      url,
+                      firmware: setup.printerOverrides?.firmware,
+                    })
                   })
                 }
                 className="flex-1 rounded-xl bg-gradient-to-r from-mint to-[#8ef0c8] py-2 text-xs font-semibold text-ink-950 transition hover:brightness-110 disabled:opacity-40"
@@ -493,6 +500,20 @@ export function PrinterView({
             <Row k="Status" v={online ? (status.mode === 'simulation' ? 'Simulation aktiv' : 'verbunden') : status.connection} />
             <Row k="Port" v={status.port ?? '—'} />
             <Row k="Firmware" v={status.firmware ?? '—'} />
+            <Row
+              k="Firmware-Art"
+              v={
+                status.firmwareKind
+                  ? `${status.firmwareKind === 'zmod' ? 'Z-Mod (IFS)' : 'Original'} · ${
+                      status.firmwareSource === 'manual'
+                        ? 'manuell'
+                        : status.firmwareSource === 'detected'
+                          ? 'erkannt'
+                          : 'aus Profil'
+                    }`
+                  : '—'
+              }
+            />
             <Row
               k="Temps"
               v={`${status.temps.nozzle.toFixed(0)}→${status.temps.nozzleTarget.toFixed(0)}°C · ${status.temps.bed.toFixed(0)}→${status.temps.bedTarget.toFixed(0)}°C`}

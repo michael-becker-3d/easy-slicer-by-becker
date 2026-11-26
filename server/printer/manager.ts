@@ -1,11 +1,18 @@
 import { EventEmitter } from 'node:events'
-import type { BedMesh, ConsoleLine, PrinterProfile, PrinterStatus, ZMeasurement } from '../../shared/types.ts'
+import type {
+  BedMesh,
+  ConsoleLine,
+  PrinterFirmwareMode,
+  PrinterProfile,
+  PrinterStatus,
+  ZMeasurement,
+} from '../../shared/types.ts'
 import { machineOffset } from '../../shared/types.ts'
 import { loadMesh, saveMesh } from '../meshStore.ts'
 import type { Area } from '../footprint.ts'
 import { printerById } from '../../shared/catalog.ts'
 import { MockTransport, SerialTransport, type Transport } from './transport.ts'
-import { KlipperClient, toolsUsedInGcode } from './klipper.ts'
+import { KlipperClient, toolsUsedInGcode, type KlipperFirmwareReport } from './klipper.ts'
 import { OctoPrintClient } from './octoprint.ts'
 import { GcodeStreamer } from './streamer.ts'
 import { meshFromPoints, parseMeshTable, parseProbeLines, type ProbePoint } from './mesh.ts'
@@ -17,6 +24,8 @@ export type ConnectOptions = {
   /** 0 oder weggelassen = Baudrate automatisch ermitteln */
   baud?: number
   profileId: string
+  /** Firmware-Art dieses Geräts; 'auto' (Standard) erkennt sie beim Verbinden. */
+  firmware?: PrinterFirmwareMode
   url?: string
   /** OctoPrint-API-Key (Header X-Api-Key) */
   apiKey?: string
@@ -83,6 +92,10 @@ export class PrinterManager extends EventEmitter {
   private chain: Promise<unknown> = Promise.resolve()
   /** Verhindert zwei gleichzeitige Startaufrufe, bevor der Status umschaltet. */
   private startPending = false
+  /** Manuelle Firmware-Wahl (Rückfall) oder 'auto' für die Erkennung. */
+  private firmwareMode: PrinterFirmwareMode = 'auto'
+  /** Ergebnis der Erkennung beim Verbinden; null = keine Antwort. */
+  private firmwareReport: KlipperFirmwareReport | null = null
 
   constructor(profileId = 'anycubic-vyper') {
     super()
@@ -109,6 +122,8 @@ export class PrinterManager extends EventEmitter {
   async connect(opts: ConnectOptions): Promise<PrinterStatus> {
     if (this.transport || this.klipper || this.octo) await this.disconnect()
     this.profileId = opts.profileId
+    this.firmwareMode = opts.firmware === 'zmod' || opts.firmware === 'original' ? opts.firmware : 'auto'
+    this.firmwareReport = null
     const profile = printerById(opts.profileId)
     // Ein Mesh gehört zu genau einem Modell — beim Wechsel nichts übernehmen
     this.mesh = loadMesh(opts.profileId)
@@ -140,6 +155,11 @@ export class PrinterManager extends EventEmitter {
           message: null,
         })
         this.logLine('info', `Klipper verbunden: ${client.baseUrl}`)
+        // Die Firmware-Art entscheidet über den Startweg: Z-Mod kennt
+        // SDCARD_PRINT_FILE/PRINT_ZCOLOR, die Original-Firmware nicht.
+        this.firmwareReport = await client.detectFirmware()
+        this.emitFirmware()
+        this.logFirmware()
         this.startPolling()
         void this.refreshMesh()
         return this.status
@@ -302,6 +322,9 @@ export class PrinterManager extends EventEmitter {
       connection: 'disconnected',
       port: null,
       firmware: null,
+      firmwareKind: null,
+      firmwareSource: null,
+      firmwareFeatures: [],
       message: null,
       temps: { nozzle: 0, nozzleTarget: 0, bed: 0, bedTarget: 0 },
       position: { x: 0, y: 0, z: 0 },
@@ -917,13 +940,53 @@ export class PrinterManager extends EventEmitter {
   }
 
   /**
-   * Der AD5X (Z-Mod) ignoriert Moonrakers print/start. Sein SDCARD_PRINT_FILE-
-   * Makro prüft die Datei und startet sie erst dann. Andere Klipper-Drucker
-   * behalten den normalen Upload-mit-Start bei.
+   * Z-Mod (AD5X) ignoriert Moonrakers print/start. Sein SDCARD_PRINT_FILE-
+   * Makro prüft die Datei und startet sie erst dann; die erkannte oder
+   * gewählte Firmware-Art entscheidet das, nicht der Profilname. Andere
+   * Klipper-Drucker behalten den normalen Upload-mit-Start bei.
    *
    * Bei AD5X wird erst nach bestätigtem `print_stats` als gestartet gemeldet;
    * ein HTTP-Erfolg des Makros allein reicht nicht.
    */
+  /**
+   * Welche Firmware läuft? Die manuelle Wahl schlägt die Erkennung, die
+   * Erkennung schlägt die Annahme aus dem Profil. Der AD5X läuft ab Werk mit
+   * Z-Mod; ohne jede Antwort bleibt es dabei, damit ein stummer Drucker nicht
+   * den Start über Moonraker bekommt, den er ignoriert.
+   */
+  firmwareKind(): { kind: 'zmod' | 'original'; source: 'manual' | 'detected' | 'profile' } {
+    if (this.firmwareMode !== 'auto') return { kind: this.firmwareMode, source: 'manual' }
+    if (this.firmwareReport) return { kind: this.firmwareReport.kind, source: 'detected' }
+    return { kind: this.profileId === 'flashforge-ad5x' ? 'zmod' : 'original', source: 'profile' }
+  }
+
+  /** Manuelle Firmware-Wahl; gilt sofort für den nächsten Start, ohne neu zu verbinden. */
+  setFirmwareMode(mode: PrinterFirmwareMode): void {
+    this.firmwareMode = mode === 'zmod' || mode === 'original' ? mode : 'auto'
+    if (this.klipper) {
+      this.emitFirmware()
+      this.logFirmware()
+    }
+  }
+
+  private emitFirmware(): void {
+    const { kind, source } = this.firmwareKind()
+    this.push({
+      firmwareKind: kind,
+      firmwareSource: source,
+      firmwareFeatures: this.firmwareReport?.features ?? [],
+    })
+  }
+
+  private logFirmware(): void {
+    const { kind, source } = this.firmwareKind()
+    const label = kind === 'zmod' ? 'Z-Mod' : 'Original-Firmware'
+    const origin =
+      source === 'manual' ? 'manuell gewählt' : source === 'detected' ? 'erkannt' : 'aus dem Profil angenommen'
+    const evidence = this.firmwareReport?.evidence.length ? ` (${this.firmwareReport.evidence.join('; ')})` : ''
+    this.logLine('info', `Firmware-Art: ${label} · ${origin}${evidence}`)
+  }
+
   private async uploadKlipper(name: string, gcode: string, start: boolean): Promise<void> {
     if (!start) {
       await this.klipper!.upload(name, gcode, false)
@@ -935,19 +998,28 @@ export class PrinterManager extends EventEmitter {
     }
     this.startPending = true
     try {
-      const viaAd5xMacro = this.profileId === 'flashforge-ad5x'
+      // Die Firmware-Art entscheidet den Startweg, nicht der Profilname:
+      // Derselbe AD5X kann mit Original-Firmware laufen und ignoriert dann
+      // jedes Z-Mod-Makro; umgekehrt läuft Z-Mod auch auf anderen Geräten.
+      const viaZmod = this.firmwareKind().kind === 'zmod'
+      const tools = toolsUsedInGcode(gcode)
       // Nicht auf upload?print=true verlassen: Bei einer älteren complete-Datei
       // kann Moonraker den Upload annehmen, ohne den neuen Druck zu starten.
       await this.klipper!.upload(name, gcode, false)
-      if (viaAd5xMacro) {
+      if (viaZmod) {
         // Der Farbwechsel holt seinen Slot aus mod_data/file.json; nur
         // PRINT_ZCOLOR schreibt diese Zuordnung. Eine Datei mit
         // Werkzeugwechseln startet deshalb darüber, sonst bricht der erste
         // Wechsel mit „CHANNEL … out of range" ab.
-        const tools = toolsUsedInGcode(gcode)
         if (tools.length > 0) await this.klipper!.startFileViaColorMacro(name, tools)
         else await this.klipper!.startFileViaMacro(name)
       } else {
+        if (tools.length > 0) {
+          this.logLine(
+            'info',
+            'Die Datei wechselt Werkzeuge, der Drucker meldet aber keine Z-Mod-Firmware — die Wechsel werden voraussichtlich nicht ausgeführt.',
+          )
+        }
         await this.klipper!.startPrint(name)
         await this.klipper!.waitForPrintStart(name)
       }

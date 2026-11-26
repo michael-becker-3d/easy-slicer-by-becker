@@ -75,12 +75,26 @@ export type PrinterProfile = {
 }
 
 /**
+ * Firmware-Art eines Klipper-Druckers. `auto` erkennt sie beim Verbinden;
+ * `zmod` und `original` sind die manuelle Wahl, wenn die Erkennung nicht greift.
+ */
+export type PrinterFirmwareMode = 'auto' | 'zmod' | 'original'
+
+/** Ergebnis der Erkennung: Z-Mod oder die Original-Firmware. */
+export type PrinterFirmwareKind = 'zmod' | 'original'
+
+/**
  * Eigene Gerätewerte eines Druckers. Sie liegen im Setup des Druckers und
  * überschreiben nur für dieses Gerät den Werkskatalog — nie den Katalog selbst.
  */
 export type PrinterOverrides = {
   bed?: { x: number; y: number; z: number }
   kinematics?: NonNullable<PrinterProfile['kinematics']>
+  /**
+   * Firmware-Art dieses Geräts (AD5X: Z-Mod oder Original). Fehlt der Wert,
+   * wird sie beim Verbinden erkannt; greift das nicht, gilt der Katalog.
+   */
+  firmware?: PrinterFirmwareMode
   /** Leer bedeutet: keine Materialbeschränkung. */
   materials?: string[]
 }
@@ -909,6 +923,12 @@ export type PrinterStatus = {
   mode: 'serial' | 'simulation' | 'klipper' | 'octoprint'
   port: string | null
   firmware: string | null
+  /** Erkannte Firmware-Art (nur Klipper/Moonraker), sonst null. */
+  firmwareKind?: PrinterFirmwareKind | null
+  /** Herkunft der Art: erkannt, manuell gewählt oder aus dem Profil angenommen. */
+  firmwareSource?: 'detected' | 'manual' | 'profile' | null
+  /** Z-Mod-Funktionen laut Drucker, z. B. print_start_tools. */
+  firmwareFeatures?: string[]
   bed: { x: number; y: number; z: number } | null
   temps: { nozzle: number; nozzleTarget: number; bed: number; bedTarget: number }
   position: Vec3

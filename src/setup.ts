@@ -63,6 +63,9 @@ function normalizePrinterOverrides(input: Setup['printerOverrides']): Setup['pri
   if (input.kinematics === 'cartesian' || input.kinematics === 'corexy' || input.kinematics === 'delta') {
     out.kinematics = input.kinematics
   }
+  if (input.firmware === 'auto' || input.firmware === 'zmod' || input.firmware === 'original') {
+    out.firmware = input.firmware
+  }
   if (Array.isArray(input.materials)) {
     const materials = input.materials
       .filter((material): material is string => typeof material === 'string')

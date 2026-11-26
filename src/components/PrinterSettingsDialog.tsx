@@ -5,6 +5,7 @@ import type {
   GcodeFlavor,
   NozzleMaterial,
   PostProcessingScript,
+  PrinterFirmwareMode,
   PrinterProfile,
   PrinterOverrides,
   PrintSettings,
@@ -64,6 +65,12 @@ const NOZZLE_MATERIALS: { id: NozzleMaterial; label: string }[] = [
   { id: 'unknown', label: 'Unbekannt' },
 ]
 
+const FIRMWARE_MODES: { id: PrinterFirmwareMode; label: string; hint: string }[] = [
+  { id: 'auto', label: 'Automatisch', hint: 'Beim Verbinden erkennen (empfohlen).' },
+  { id: 'zmod', label: 'Z-Mod', hint: 'IFS-Wechsel, Start über PRINT_ZCOLOR/SDCARD_PRINT_FILE.' },
+  { id: 'original', label: 'Original', hint: 'Werksfirmware: Start über Moonrakers print/start.' },
+]
+
 const CONTROL_LABEL: Record<PrinterProfile['control'], string> = {
   'marlin-serial': 'USB / Marlin',
   'klipper-moonraker': 'Klipper / Moonraker',
@@ -118,6 +125,15 @@ export function PrinterSettingsDialog({
 
   const updateOverrides = (patch: PrinterOverrides) => {
     onPrinterOverrides({ ...(printerOverrides ?? {}), ...patch })
+  }
+
+  const firmwareMode: PrinterFirmwareMode = printerOverrides?.firmware ?? 'auto'
+
+  const setFirmware = (mode: PrinterFirmwareMode) => {
+    const next: PrinterOverrides = { ...(printerOverrides ?? {}) }
+    if (mode === 'auto') delete next.firmware
+    else next.firmware = mode
+    onPrinterOverrides(Object.keys(next).length ? next : undefined)
   }
 
   const setBed = (axis: 'x' | 'y' | 'z', raw: string) => {
@@ -297,6 +313,47 @@ export function PrinterSettingsDialog({
                     </span>
                   </label>
                 </section>
+
+                {printer.control === 'klipper-moonraker' && (
+                  <section className="rounded-2xl border border-line/70 bg-ink-900/50 p-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div>
+                        <h3 className="text-[10px] font-semibold tracking-[0.16em] text-white/40 uppercase">
+                          Firmware-Art
+                        </h3>
+                        <p className="mt-0.5 text-[9px] leading-snug text-white/30">
+                          „Automatisch“ erkennt beim Verbinden, ob Z-Mod läuft. Z-Mod startet über seine Makros und
+                          schreibt die Werkzeug-Slot-Zuordnung; die Original-Firmware startet über Moonrakers print/start
+                          und kennt keine Farbwechsel.
+                        </p>
+                      </div>
+                      <span className="rounded-full border border-mint/30 bg-mint/10 px-2 py-0.5 text-[9px] font-semibold text-mint">
+                        {FIRMWARE_MODES.find((m) => m.id === firmwareMode)?.label}
+                      </span>
+                    </div>
+                    <div className="mt-2 grid gap-1.5 sm:grid-cols-3">
+                      {FIRMWARE_MODES.map((m) => (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => setFirmware(m.id)}
+                          className={`rounded-xl border px-2.5 py-2 text-left transition ${
+                            firmwareMode === m.id
+                              ? 'border-amber/60 bg-amber/10 text-amber'
+                              : 'border-line/70 text-white/55 hover:border-white/25 hover:text-white/80'
+                          }`}
+                        >
+                          <span className="block text-[10px] font-semibold">{m.label}</span>
+                          <span className="mt-0.5 block text-[8px] leading-snug text-white/30">{m.hint}</span>
+                        </button>
+                      ))}
+                    </div>
+                    <p className="mt-2 text-[9px] leading-snug text-white/25">
+                      Die Wahl gilt nur für dieses Gerät. Greift die Erkennung nicht, hier die tatsächlich laufende
+                      Firmware einstellen.
+                    </p>
+                  </section>
+                )}
 
                 <div className="grid gap-2 sm:grid-cols-2">
                   <Card label="Verbindung" value={CONTROL_LABEL[printer.control]} />

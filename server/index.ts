@@ -3116,6 +3116,21 @@ app.post('/api/printer/connect', async (req, res) => {
   }
 })
 
+/**
+ * Firmware-Art umstellen — der Rückfall, wenn die Erkennung nicht greift.
+ * Gilt sofort für den nächsten Start; gespeichert wird sie im Druckerstand.
+ */
+app.post('/api/printer/firmware', (req, res) => {
+  const { mode } = req.body as { mode?: string }
+  if (mode !== 'auto' && mode !== 'zmod' && mode !== 'original') {
+    res.status(400).json({ error: 'Unbekannte Firmware-Art.' })
+    return
+  }
+  const manager = hub.selected
+  manager.setFirmwareMode(mode)
+  res.json({ status: manager.status })
+})
+
 /** Nur die Ansicht umschalten — ohne die bestehende Druckerverbindung zu trennen. */
 app.post('/api/printer/select', (req, res) => {
   const { printerId } = req.body as { printerId?: string }

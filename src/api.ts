@@ -588,6 +588,8 @@ export async function connectPrinter(opts: {
   path?: string
   baud?: number
   profileId: string
+  /** Firmware-Art dieses Geräts; 'auto' erkennt sie beim Verbinden. */
+  firmware?: 'auto' | 'zmod' | 'original'
   url?: string
   apiKey?: string
 }): Promise<PrinterStatus> {
@@ -596,6 +598,18 @@ export async function connectPrinter(opts: {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(opts),
+    }),
+  )
+  return data.status
+}
+
+/** Firmware-Art umstellen; gilt sofort für den nächsten Start. */
+export async function setPrinterFirmware(mode: 'auto' | 'zmod' | 'original'): Promise<PrinterStatus> {
+  const data = await json<{ status: PrinterStatus }>(
+    await fetch('/api/printer/firmware', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ mode }),
     }),
   )
   return data.status

@@ -36,12 +36,15 @@ export function WebConnectDialog({
   open,
   printer,
   status,
+  firmware,
   onClose,
   onConnected,
 }: {
   open: boolean
   printer: PrinterProfile
   status: PrinterStatus
+  /** Firmware-Art aus dem Druckerstand: 'auto' erkennt sie beim Verbinden. */
+  firmware?: 'auto' | 'zmod' | 'original'
   onClose: () => void
   /** Mainsail/Fluidd, falls gefunden — wird direkt in der App geöffnet */
   onConnected: (webUi: WebUiInfo | null) => void
@@ -143,6 +146,7 @@ export function WebConnectDialog({
         mode: def.mode,
         url,
         profileId: printer.id,
+        firmware,
         apiKey: apiKey.trim() || undefined,
       })
       setNote(`${def.label} verbunden — ${st.firmware ?? 'Firmware unbekannt'}`)

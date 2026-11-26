@@ -1385,8 +1385,16 @@ export default function App() {
       setOutputInfo(null)
       saveSetup(nextSetup)
       saveSnapshot({ setup: nextSetup, settings, savedAt: Date.now() }, nextSetup.printerId)
+      // Die Firmware-Art wirkt auf dem Server beim Start; eine Änderung muss
+      // ohne neues Verbinden ankommen, sonst startet der nächste Druck noch
+      // über den alten Weg.
+      const previousMode = setup.printerOverrides?.firmware ?? 'auto'
+      const nextMode = next?.firmware ?? 'auto'
+      if (nextMode !== previousMode && status.connection === 'connected') {
+        void api.setPrinterFirmware(nextMode).catch(() => undefined)
+      }
     },
-    [printer, settings, setup],
+    [printer, settings, setup, status.connection],
   )
 
   /** Aktuelle Einstellungen im ausgewählten oder in einem neuen Filamentprofil ablegen. */
@@ -4886,6 +4894,7 @@ export default function App() {
           open={webOpen}
           printer={printer}
           status={status}
+          firmware={setup.printerOverrides?.firmware}
           onClose={() => setWebOpen(false)}
           onConnected={(info) => {
             setWebOpen(false)
