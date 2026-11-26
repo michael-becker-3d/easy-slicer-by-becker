@@ -7,7 +7,7 @@ Erzeugt aus `package-lock.json` (138 Produktionspakete).
 
 ## Node.js
 
-Laufzeit: Node.js 26.12.1
+Laufzeit: Node.js 24.22.1
 
 Lizenz: MIT
 

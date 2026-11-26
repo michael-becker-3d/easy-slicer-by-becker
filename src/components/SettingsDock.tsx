@@ -1476,7 +1476,8 @@ export function SettingsDock({
                 <div className="rounded-xl border border-line/70 bg-ink-900/40 p-2.5 text-[10px] leading-relaxed text-white/35 sm:col-span-2">
                   Das gemessene Mesh wird beim Slicen fest in die Z-Werte geschrieben. Der Druck braucht danach keine
                   Verbindung mehr — G-Code auf die SD-Karte und dort starten. Eine laufende Firmware-Kompensation (M420 /
-                  BED_MESH_PROFILE) ist nicht mehr nötig und war über USB zu langsam.
+                  BED_MESH_PROFILE) ist nicht mehr nötig und war über USB zu langsam. Bei Klipper gehört das Mesh
+                  dem Drucker — dort bleibt „Aus" die richtige Wahl, weil START_PRINT/KAMP es ohnehin anwenden.
                 </div>
                 <div className="rounded-xl border border-line/70 bg-ink-900/40 p-2.5 sm:col-span-2">
                   <div className="flex items-center justify-between">

@@ -39,6 +39,9 @@ const vase = applyPrinterLimits(
     adhesion: 'none',
     primeLine: { ...DEFAULT_SETTINGS.primeLine, enabled: false },
     special: { vase: true },
+    // Dieser Test prüft die Kompensation im Vasenmodus — sie muss ausdrücklich
+    // eingeschaltet sein, seit der Standard „aus" ist.
+    meshCompensation: 'software',
   }),
 )
 

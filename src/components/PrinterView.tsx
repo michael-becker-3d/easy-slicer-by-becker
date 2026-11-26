@@ -989,8 +989,9 @@ export function PrinterView({
                   </span>
                 </div>
                 <p className="mt-1.5 text-[9px] leading-snug text-white/25">
-                  Die Messwerte landen fest in den Z-Werten der Datei. Der Druck läuft damit auch von SD-Karte, ohne
-                  laufende USB-Verbindung — M420 und das Firmware-Mesh werden nicht mehr gebraucht.
+                  {profile.control === 'klipper-moonraker'
+                    ? 'Klipper misst in einer eigenen Nullage: die Zahlen oben sind relativ zum Sensor-Nullpunkt und taugen nicht als Z-Koordinate. Den Bettausgleich macht der Drucker selbst (START_PRINT/KAMP), der G-Code bleibt auf der nominellen Höhe.'
+                    : 'Die Messwerte landen fest in den Z-Werten der Datei. Der Druck läuft damit auch von SD-Karte, ohne laufende USB-Verbindung — M420 und das Firmware-Mesh werden nicht mehr gebraucht.'}
                 </p>
               </>
             ) : (

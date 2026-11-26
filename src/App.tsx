@@ -2082,7 +2082,7 @@ export default function App() {
       return `Kein Bett-Mesh für ${printer.name} hinterlegt — der G-Code wird ohne Bettkorrektur geschnitten. Dieses Modell liefert keine Messwerte über USB; bitte am Gerät nivellieren, dort bleibt das Mesh in der Firmware.`
     }
     if (printer.control === 'klipper-moonraker') {
-      return `Kein Bett-Mesh für ${printer.name} hinterlegt — der G-Code wird ohne Bettkorrektur geschnitten. Beim ersten Druck wird das vorhandene bed_mesh einmal übernommen und für dieses Modell gespeichert.`
+      return `Kein Bett-Mesh für ${printer.name} hinterlegt — der G-Code startet auf der nominellen Höhe, wie bei Orca. Den Bettausgleich macht der Drucker selbst (START_PRINT oder KAMP mit seinem bed_mesh); in die Z-Werte wird nichts geschrieben.`
     }
     return `Kein Bett-Mesh für ${printer.name} hinterlegt — der G-Code wird ohne Bettkorrektur geschnitten. Beim ersten Druck misst das Programm einmal automatisch (G29) und legt die Werte für dieses Modell ab.`
   }, [settings.meshCompensation, mesh, printer])

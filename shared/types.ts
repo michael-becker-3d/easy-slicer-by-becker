@@ -1177,7 +1177,7 @@ export const DEFAULT_SETTINGS: PrintSettings = {
     filenameFormat: '{input_filename_base}_{filament_type[0]}_{print_time}.gcode',
   },
   ironing: { enabled: false, flow: 0.12, speed: 25, spacing: 0.12, inset: 0, angle: 45, type: 'top', pattern: 'lines' },
-  meshCompensation: 'software',
+  meshCompensation: 'off',
   adaptiveMesh: { enabled: true, margin: 10, grid: 5 },
   autoZ: { enabled: false, samples: 3 },
   pressureAdvance: { enabled: false, value: 0.04 },

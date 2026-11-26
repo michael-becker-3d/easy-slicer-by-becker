@@ -3474,11 +3474,10 @@ app.post('/api/printer/print', jsonGcode, async (req, res) => {
     await manager.heatForProbe(merged.temps.firstLayerNozzle, merged.temps.firstLayerBed)
     bedMesh = saveMesh(profile.id, await manager.probeBed('auto', { cols: profile.meshGrid.cols, rows: profile.meshGrid.rows }))
   }
-  // Klipper-Geräte (z. B. AD5X): vorhandenes bed_mesh einmal übernehmen und ablegen
-  if (!bedMesh && !adaptive && profile.control === 'klipper-moonraker' && manager.connected && manager.profileId === profile.id) {
-    await manager.refreshMesh()
-    bedMesh = loadMesh(profile.id)
-  }
+  // Klipper-Geräte: das bed_mesh gehört dem Drucker. START_PRINT/KAMP laden es
+  // und rechnen es selbst auf Z; dieselben Werte zusätzlich in die Z-Koordinaten
+  // zu schreiben, würde den Versatz doppelt anwenden. Der G-Code startet deshalb
+  // auf der nominellen Höhe — „Im G-Code" gilt nur, wenn es ausdrücklich an ist.
 
   if (!gcode && !adaptive) {
     res.status(400).json({ error: 'Kein G-Code übergeben.' })
